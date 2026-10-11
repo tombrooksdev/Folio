@@ -5,7 +5,7 @@ Thanks for helping. Folio is intentionally small, so the best contributions keep
 ## Setup
 
 ```bash
-git clone https://github.com/<your-username>/folio.git
+git clone https://github.com/tombrooksdev/Folio.git
 cd folio
 npm install
 npm run dev     # http://localhost:3000
