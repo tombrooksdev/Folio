@@ -5,6 +5,7 @@ import { createApp } from '../src/app.js';
 
 async function boot() {
   const server = createApp(openDb(':memory:')).listen(0);
+  server.unref();
   const base = `http://localhost:${server.address().port}`;
   let cookie = '';
   const req = async (path, { method = 'GET', form } = {}) => {
@@ -93,5 +94,59 @@ test('scrum: sprint lifecycle, drag/move, ordering, completion', async () => {
   await req(`/sprints/${sprintId}/complete`, { method: 'POST' });
   assert.match((await req('/s/ENG/board')).text, /No active sprint/);
   assert.match((await req('/s/ENG/backlog')).text, /Write docs/);
+  close();
+});
+
+test('reports: burndown, velocity and sprint history', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const mk = async (title, points) => (await req('/s/ENG/issues', { method: 'POST', form: { title, points } })).loc.split('/')[2];
+  const a = await mk('One', '3'), b = await mk('Two', '5'), c = await mk('Three', '2');
+  await req('/s/ENG/sprints', { method: 'POST', form: { name: 'Sprint 1' } });
+  const sid = (await req('/s/ENG/backlog')).text.match(/data-sprint="(\d+)"/)[1];
+  for (const id of [a, b]) await req(`/issues/${id}/move`, { method: 'POST', form: { sprint: sid, before: '' } });
+  await req(`/sprints/${sid}/start`, { method: 'POST', form: { weeks: '2' } });
+  await req(`/issues/${c}/move`, { method: 'POST', form: { sprint: sid, before: '' } }); // scope added mid-sprint
+  await req(`/issues/${a}/move`, { method: 'POST', form: { status: 'done', before: '' } });
+
+  assert.match((await req('/s/ENG/board')).text, /<svg class="chart"/);
+  let rep = (await req(`/sprints/${sid}/report`)).text;
+  assert.match(rep, /<b>8<\/b><span>Committed/);
+  assert.match(rep, /<b>\+2<\/b><span>Scope change/);
+  assert.match(rep, /<b>3<\/b><span>Completed/);
+  assert.match(rep, /<b>7<\/b><span>Remaining/);
+
+  await req(`/sprints/${sid}/complete`, { method: 'POST' });
+  rep = (await req(`/sprints/${sid}/report`)).text;
+  assert.match(rep, /Not completed \(2\)/); assert.match(rep, /Two/);
+  const reports = (await req('/s/ENG/reports')).text;
+  assert.match(reports, /Sprint 1/); assert.match(reports, /3\/10 pts/); assert.match(reports, /aria-label="Velocity chart"/);
+  close();
+});
+
+test('issue sidebar: inline field edits update the issue and the burndown log', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const id = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Thing', points: '3' } })).loc.split('/')[2];
+  assert.equal((await req(`/i/${id}/field`, { method: 'POST', form: { field: 'status', value: 'doing' } })).loc, `/i/${id}`);
+  assert.equal((await req(`/i/${id}/field`, { method: 'POST', form: { field: 'points', value: '8' } })).status, 302);
+  assert.equal((await req(`/i/${id}/field`, { method: 'POST', form: { field: 'priority', value: 'nope' } })).status, 400); // invalid values are rejected
+  assert.equal((await req(`/i/${id}/field`, { method: 'POST', form: { field: 'bogus', value: 'x' } })).status, 400);
+  const page = (await req(`/i/${id}`)).text;
+  assert.match(page, /<option value="doing" selected>/);
+  assert.match(page, /value="8"/);
+  close();
+});
+
+test('changelog page renders from CHANGELOG.md with the package version', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  const { version } = JSON.parse((await import('node:fs')).readFileSync(new URL('../package.json', import.meta.url)));
+  const page = (await req('/changelog')).text;
+  assert.match(page, new RegExp(`Folio v${version.replaceAll('.', '\\.')}`));
+  assert.match(page, new RegExp(`\\[?${version.replaceAll('.', '\\.')}\\]?`));
+  assert.match(page, /Unreleased/);
   close();
 });

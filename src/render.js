@@ -60,6 +60,8 @@ const PATHS = {
   play: 'M7 5l12 7-12 7z',
   flag: 'M5 21V4m0 0h11l-2 4 2 4H5',
   palette: 'M12 3a9 9 0 100 18c1.1 0 1.8-.9 1.5-2-.3-1 .3-2 1.4-2H17a4 4 0 004-4c0-5-4-10-9-10zM7.5 12h.01M10 7.5h.01M15 7.5h.01',
+  chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  equals: 'M5 9h14M5 15h14',
   logo: 'M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2zM14 3v6h6M8 13h8M8 17h5',
 };
 export const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${PATHS[name]}"/></svg>`;

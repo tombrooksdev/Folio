@@ -1,4 +1,5 @@
 import express from 'express';
+import { readFileSync } from 'node:fs';
 import { buildTree, ftsQuery, tx } from './db.js';
 import {
   COOKIE, hashPassword, verifyPassword, createSession, userForToken, destroySession,
@@ -7,7 +8,8 @@ import {
 import { mountBoard } from './board.js';
 import { renderMarkdown, esc, layout, treeHtml, icon, hueClass } from './render.js';
 
-const VERSION = '0.3.0';
+const { version: VERSION } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
+const CHANGELOG = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
 const parseCookies = (h = '') =>
   Object.fromEntries(h.split(';').map((c) => c.trim().split('=')).filter((p) => p[0]).map(([k, ...v]) => [k, v.join('=')]));
 
@@ -172,6 +174,7 @@ export function createApp(db, { secureCookies = false } = {}) {
             <a class="btn ghost" href="/s/${esc(space.key)}/new?parent=${p.id}">${icon('plus')}Child page</a>
             <a class="btn ghost" href="/p/${p.id}/history">${icon('clock')}History</a>
             <a class="btn ghost" href="/p/${p.id}.md">${icon('download')}Markdown</a>
+            <button type="button" class="ghost width-toggle" id="width-toggle" aria-pressed="false">${icon('sidebar')}Readable width</button>
           </div>
         </header>
         <article class="doc" id="doc">${renderMarkdown(p.body)}</article>`,
@@ -241,6 +244,15 @@ export function createApp(db, { secureCookies = false } = {}) {
 
   app.post('/preview', (req, res) => res.type('html').send(renderMarkdown(req.body.body ?? '')));
 
+  // ---- changelog (rendered from CHANGELOG.md) ----
+  app.get('/changelog', (req, res) => {
+    page(res, {
+      title: 'Changelog', user: req.user, toc: false,
+      body: `<div class="page-head"><div><span class="eyebrow">Folio v${esc(VERSION)}</span><h1 class="page-title">What's new</h1></div></div>
+        <article class="doc changelog">${renderMarkdown(CHANGELOG.replace(/^# Changelog\s*/, ''))}</article>`,
+    });
+  });
+
   // ---- search ----
   app.get('/search', (req, res) => {
     const q = (req.query.q ?? '').toString();
@@ -279,10 +291,10 @@ export function createApp(db, { secureCookies = false } = {}) {
       <ul class="spaces">${spaces.map((s) => {
         const here = space && s.id === space.id;
         return `<li class="space${here ? ' here' : ''}"><a class="space-link" href="/s/${esc(s.key)}"><span class="mono-tile ${hueClass(s.key)}">${esc(s.key.slice(0, 1))}</span>${esc(s.name)}</a>${here
-          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/new${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
+          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><a class="nav-link sm-nav${section === 'reports' ? ' cur' : ''}" href="/s/${esc(s.key)}/reports">${icon('chart')}Reports</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/new${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
           : ''}</li>`;
       }).join('')}</ul>
-      <p class="credit">folio v${VERSION} · by <a href="https://tombrooks.dev" target="_blank" rel="noopener">tombrooks.dev</a></p>`;
+      <p class="credit"><a href="/changelog" title="What's new">folio v${VERSION}</a> · by <a href="https://tombrooks.dev" target="_blank" rel="noopener">tombrooks.dev</a></p>`;
   }
   function breadcrumbs(p) {
     const out = [];

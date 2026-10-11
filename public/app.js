@@ -134,3 +134,12 @@ $$('.tree li.has-kids').forEach((li) => {
     save('folio-open-nodes', [...openNodes]);
   });
 });
+
+// article width: full by default, optional readable column (remembered)
+const wt = $('#width-toggle');
+document.body.classList.toggle('readable', load('folio-readable', false));
+if (wt) {
+  const paint = () => wt.setAttribute('aria-pressed', document.body.classList.contains('readable'));
+  paint();
+  wt.addEventListener('click', () => { save('folio-readable', document.body.classList.toggle('readable')); paint(); });
+}

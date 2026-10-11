@@ -40,7 +40,8 @@ Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both 
 - Sprints: create, plan, start (1-4 weeks), complete (unfinished work returns to the backlog)
 - Issues: story / bug / task, priority, story points, assignee, Markdown description, comments
 - Drag and drop to reorder, move between sprints, and change status
-- Sprint progress bar with points done and days left
+- Sprint progress with points done and days left, plus burndown, velocity and sprint history reports
+- Jira-style layout: filters, status lozenges, issue-type icons, a two-column issue view with inline editing
 - Issue keys like `ENG-12`
 
 **Make it yours**
@@ -222,11 +223,14 @@ Themes are sets of CSS variables.
 
 Not included yet: two-factor auth, per-space permissions and audit logs. Please report vulnerabilities privately rather than in a public issue.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md), also shown in the app at `/changelog` (click the version in the sidebar footer). Folio follows [Semantic Versioning](https://semver.org/).
+
 ## Roadmap
 
 - [ ] File and image attachments
 - [ ] Roles and per-space permissions
-- [ ] Burndown chart and sprint history
 - [ ] Issue search and filters
 - [ ] Move and reorder pages in the tree
 - [ ] Page templates
