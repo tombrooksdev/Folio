@@ -60,9 +60,17 @@ Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both 
 |---|---|
 | ![Article](docs/screenshots/article.png) | ![Editor](docs/screenshots/editor.png) |
 
-| Backlog | Home |
+| Backlog | Issue |
 |---|---|
-| ![Backlog](docs/screenshots/backlog.png) | ![Home](docs/screenshots/home.png) |
+| ![Backlog](docs/screenshots/backlog.png) | ![Issue](docs/screenshots/issue.png) |
+
+| Velocity and sprint history | Sprint burndown |
+|---|---|
+| ![Reports](docs/screenshots/reports.png) | ![Sprint report](docs/screenshots/sprint-report.png) |
+
+| Home |
+|---|
+| ![Home](docs/screenshots/home.png) |
 
 ### Themes
 

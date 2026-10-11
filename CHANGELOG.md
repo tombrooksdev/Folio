@@ -4,7 +4,8 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- Refreshed README screenshots, including the issue view, reports and burndown.
 
 ## [0.4.0] - 2026-10-12
 
