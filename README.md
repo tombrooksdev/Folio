@@ -83,7 +83,7 @@ Also included: Paper, Blush, Solarized, Forest, Nord and High contrast.
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/<your-username>/folio.git
+git clone https://github.com/tombrooksdev/Folio.git
 cd folio
 docker compose up -d --build
 ```

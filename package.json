@@ -30,5 +30,13 @@
     "self-hosted",
     "markdown",
     "sqlite"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tombrooksdev/Folio.git"
+  },
+  "homepage": "https://github.com/tombrooksdev/Folio#readme",
+  "bugs": {
+    "url": "https://github.com/tombrooksdev/Folio/issues"
+  }
 }

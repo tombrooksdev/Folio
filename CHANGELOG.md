@@ -80,8 +80,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/<your-username>/folio/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/<your-username>/folio/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/<your-username>/folio/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/<your-username>/folio/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/<your-username>/folio/releases/tag/v0.1.0
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/tombrooksdev/Folio/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/tombrooksdev/Folio/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/tombrooksdev/Folio/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/tombrooksdev/Folio/releases/tag/v0.1.0
