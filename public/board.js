@@ -1,47 +1,40 @@
-// Drag-and-drop for the board and backlog, plus confirm prompts. Cards are links, so a plain click still navigates.
+// Board and backlog behaviour: drag-and-drop, filters, collapsible sprints, quick-create, inline field edits.
+// Cards are links, so a plain click still navigates.
 (() => {
 let dragged = null;
-
-function placeholderFor(zone) { return zone.querySelector('.drop-hint'); }
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
 function recount() {
-  document.querySelectorAll('[data-drop]').forEach((zone) => {
-    const items = zone.querySelectorAll('[data-drag]');
-    const total = [...items].reduce((a, el) => a + Number(el.dataset.points || 0), 0);
+  $$('[data-drop]').forEach((zone) => {
+    const items = $$('[data-drag]:not([hidden])', zone);
+    const total = items.reduce((a, el) => a + Number(el.dataset.points || 0), 0);
     const holder = zone.closest('.column, .sprint-block');
-    holder?.querySelector('[data-count]') && (holder.querySelector('[data-count]').textContent = items.length);
-    holder?.querySelector('[data-points-total]') && (holder.querySelector('[data-points-total]').textContent = total);
+    const count = holder?.querySelector('[data-count]'), pts = holder?.querySelector('[data-points-total]');
+    if (count) count.textContent = items.length;
+    if (pts) pts.textContent = total;
   });
 }
-
-function after(zone, y) {
-  // the card the pointer is above, so we can insert before it
-  return [...zone.querySelectorAll('[data-drag]:not(.dragging)')].find((el) => {
-    const r = el.getBoundingClientRect();
-    return y < r.top + r.height / 2;
-  });
-}
+const after = (zone, y) => $$('[data-drag]:not(.dragging)', zone).find((el) => y < el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2);
 
 document.addEventListener('dragstart', (e) => {
   const el = e.target.closest?.('[data-drag]');
   if (!el) return;
-  dragged = el;
-  el.classList.add('dragging');
+  dragged = el; el.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', el.dataset.id);
 });
 document.addEventListener('dragend', () => {
   dragged?.classList.remove('dragging');
-  document.querySelectorAll('.over').forEach((z) => z.classList.remove('over'));
+  $$('.over').forEach((z) => z.classList.remove('over'));
   dragged = null;
 });
 document.addEventListener('dragover', (e) => {
   const zone = e.target.closest?.('[data-drop]');
   if (!zone || !dragged) return;
   e.preventDefault();
-  document.querySelectorAll('.over').forEach((z) => z !== zone && z.classList.remove('over'));
+  $$('.over').forEach((z) => z !== zone && z.classList.remove('over'));
   zone.classList.add('over');
-  placeholderFor(zone)?.remove();
+  zone.querySelector('.drop-hint')?.remove();
   const next = after(zone, e.clientY);
   next ? zone.insertBefore(dragged, next) : zone.append(dragged);
 });
@@ -55,14 +48,61 @@ document.addEventListener('drop', async (e) => {
   if ('sprint' in zone.dataset) body.set('sprint', zone.dataset.sprint);
   const next = dragged.nextElementSibling?.closest('[data-drag]');
   body.set('before', next ? next.dataset.id : '');
+  // keep the Done styling honest when a card changes column
+  if (zone.dataset.status) dragged.classList.toggle('is-done', zone.dataset.status === 'done');
   recount();
   const res = await fetch(`/issues/${dragged.dataset.id}/move`, { method: 'POST', body });
   if (!res.ok) location.reload();
-  document.querySelectorAll('.list[data-drop]').forEach((z) => {
+  $$('.list[data-drop]').forEach((z) => {
     if (!z.querySelector('[data-drag]') && !z.querySelector('.drop-hint')) z.insertAdjacentHTML('beforeend', '<p class="drop-hint muted">Drag issues here</p>');
   });
 });
 
-document.querySelectorAll('form[data-confirm]').forEach((f) =>
-  f.addEventListener('submit', (e) => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
+// ---- board filters (search text + assignee) ----
+const search = document.getElementById('board-search');
+if (search) {
+  const users = new Set();
+  const mine = document.getElementById('only-mine'), clear = document.getElementById('clear-filters');
+  const apply = () => {
+    const q = search.value.trim().toLowerCase();
+    $$('.board [data-drag]').forEach((el) => {
+      el.hidden = !((!q || el.dataset.text.includes(q)) && (!users.size || users.has(el.dataset.assignee)));
+    });
+    clear.hidden = !(q || users.size);
+    recount();
+  };
+  search.addEventListener('input', apply);
+  $$('.av-filter').forEach((b) => b.addEventListener('click', () => {
+    const u = b.dataset.user;
+    users.has(u) ? users.delete(u) : users.add(u);
+    b.setAttribute('aria-pressed', users.has(u));
+    apply();
+  }));
+  mine.addEventListener('click', () => {
+    users.clear(); users.add(mine.dataset.me);
+    $$('.av-filter').forEach((b) => b.setAttribute('aria-pressed', b.dataset.user === mine.dataset.me));
+    apply();
+  });
+  clear.addEventListener('click', () => {
+    users.clear(); search.value = '';
+    $$('.av-filter').forEach((b) => b.setAttribute('aria-pressed', false));
+    apply();
+  });
+}
+
+// ---- backlog: collapse sprints, show create forms ----
+$$('.collapse').forEach((b) => b.addEventListener('click', () => {
+  const block = b.closest('.sprint-block');
+  b.setAttribute('aria-expanded', block.classList.toggle('collapsed') ? 'false' : 'true');
+}));
+$$('[data-toggle]').forEach((b) => b.addEventListener('click', () => {
+  const target = document.getElementById(b.dataset.toggle);
+  target.hidden = !target.hidden;
+  if (!target.hidden) target.querySelector('input:not([type=hidden])')?.focus();
+}));
+
+// ---- issue page: selects and inputs save when changed ----
+$$('[data-auto]').forEach((el) => el.addEventListener('change', () => el.form.requestSubmit()));
+
+$$('form[data-confirm]').forEach((f) => f.addEventListener('submit', (e) => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
 })();

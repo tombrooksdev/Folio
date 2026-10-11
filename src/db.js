@@ -81,6 +81,25 @@ export function openDb(file) {
       body TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    -- Every change to a sprint's scope or completed points, so burndown and history can be replayed.
+    CREATE TABLE IF NOT EXISTS sprint_log (
+      id INTEGER PRIMARY KEY,
+      sprint_id INTEGER NOT NULL REFERENCES sprints(id) ON DELETE CASCADE,
+      issue_id INTEGER,
+      scope_delta INTEGER NOT NULL DEFAULT 0,
+      done_delta INTEGER NOT NULL DEFAULT 0,
+      initial INTEGER NOT NULL DEFAULT 0,
+      at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS sprint_log_sprint ON sprint_log(sprint_id, at);
+    -- Issues that were not finished when a sprint closed (they move back to the backlog).
+    CREATE TABLE IF NOT EXISTS sprint_carry (
+      sprint_id INTEGER NOT NULL REFERENCES sprints(id) ON DELETE CASCADE,
+      issue_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      points INTEGER,
+      PRIMARY KEY (sprint_id, issue_id)
+    );
     CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
       title, body, content='pages', content_rowid='id', tokenize='porter unicode61'
     );
@@ -95,6 +114,12 @@ export function openDb(file) {
       INSERT INTO pages_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
     END;
   `);
+  // Sprints that were started before burndown tracking existed get a starting snapshot from their current issues.
+  db.exec(`
+    INSERT INTO sprint_log (sprint_id, issue_id, scope_delta, done_delta, initial, at)
+    SELECT s.id, i.id, COALESCE(i.points, 0), CASE WHEN i.status = 'done' THEN COALESCE(i.points, 0) ELSE 0 END, 1, s.started_at
+    FROM sprints s JOIN issues i ON i.sprint_id = s.id
+    WHERE s.state = 'active' AND NOT EXISTS (SELECT 1 FROM sprint_log l WHERE l.sprint_id = s.id)`);
   return db;
 }
 
