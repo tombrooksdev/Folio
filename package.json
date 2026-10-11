@@ -1,18 +1,34 @@
 {
   "name": "folio",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Self-hosted wiki: spaces, nested pages, Markdown, search, version history.",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=22.5" },
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "add-user": "node scripts/add-user.js",
+    "backup": "node scripts/backup.js"
   },
   "dependencies": {
     "express": "^4.21.0",
     "marked": "^14.1.0",
     "sanitize-html": "^2.13.0"
-  }
+  },
+  "license": "MIT",
+  "author": "Tom Brooks <https://tombrooks.dev>",
+  "keywords": [
+    "wiki",
+    "confluence-alternative",
+    "jira-alternative",
+    "scrum",
+    "kanban",
+    "self-hosted",
+    "markdown",
+    "sqlite"
+  ]
 }

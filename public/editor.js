@@ -1,4 +1,5 @@
 // Markdown editor: live preview, formatting toolbar, shortcuts, word count, unsaved indicator, delete confirm.
+(() => {
 const body = document.getElementById('body');
 const preview = document.getElementById('preview');
 const form = document.getElementById('edit-form');
@@ -55,3 +56,4 @@ body.addEventListener('keydown', (e) => {
 document.querySelectorAll('form[data-confirm]').forEach((f) =>
   f.addEventListener('submit', (e) => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
 count(); refresh();
+})();

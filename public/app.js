@@ -5,18 +5,44 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 // stagger entrance animations
 $$('[data-i]').forEach((el) => el.style.setProperty('--i', el.dataset.i));
 
-// theme
-const MOON = '<svg class="i" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>';
-const SUN = '<svg class="i" viewBox="0 0 24 24"><path d="M12 3v2m0 14v2M5.6 5.6l1.4 1.4m10 10l1.4 1.4M3 12h2m14 0h2M5.6 18.4L7 17m10-10l1.4-1.4M12 16a4 4 0 100-8 4 4 0 000 8z"/></svg>';
-const themeBtn = $('#theme');
-const paintTheme = () => themeBtn && (themeBtn.innerHTML = document.documentElement.dataset.theme === 'dark' ? SUN : MOON);
-paintTheme();
-themeBtn?.addEventListener('click', () => {
-  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem('folio-theme', next); } catch {}
-  paintTheme();
-});
+// theme picker. Each theme is a token set in style.css; swatch = [background, surface-ish, accent].
+const THEMES = [
+  ['Light', [
+    ['tombrooks', 'tombrooks.dev', '#faf6ee', '#ffffff', '#c44a1f'],
+    ['paper', 'Paper', '#f7f7f5', '#ffffff', '#2563eb'],
+    ['sage', 'Sage', '#f3f6f1', '#fcfdfb', '#2f7d4f'],
+    ['blush', 'Blush', '#fdf4f6', '#ffffff', '#c92a64'],
+    ['solarized', 'Solarized', '#fdf6e3', '#fffdf5', '#268bd2'],
+  ]],
+  ['Dark', [
+    ['tombrooks-dark', 'tombrooks.dev', '#1a1917', '#242220', '#e0764a'],
+    ['midnight', 'Midnight', '#0b1020', '#111830', '#5aa9ff'],
+    ['forest', 'Forest', '#0f1a14', '#15231b', '#52c283'],
+    ['dracula', 'Dracula', '#282a36', '#2f3140', '#bd93f9'],
+    ['nord', 'Nord', '#2e3440', '#343b49', '#88c0d0'],
+    ['contrast', 'High contrast', '#000000', '#0a0a0a', '#ffd60a'],
+  ]],
+];
+const themeBtn = $('#theme'), menu = $('#theme-menu');
+function setTheme(id) {
+  document.documentElement.dataset.theme = id;
+  try { localStorage.setItem('folio-theme', id); } catch {}
+  $$('.theme-opt', menu).forEach((b) => b.setAttribute('aria-checked', b.dataset.theme === id));
+}
+if (themeBtn) {
+  menu.innerHTML = THEMES.map(([group, list]) => `<h4>${group}</h4><div class="theme-grid">${list.map(([id, name]) =>
+    `<button type="button" class="theme-opt ghost" role="menuitemradio" data-theme="${id}" aria-checked="false"><span class="swatch"><i></i><i></i><i></i></span>${name}</button>`).join('')}</div>`).join('');
+  THEMES.flatMap(([, l]) => l).forEach(([id, , a, b, c]) => {
+    const sw = $$('.swatch', $(`.theme-opt[data-theme="${id}"]`, menu))[0].children;
+    [a, b, c].forEach((col, i) => (sw[i].style.background = col));
+  });
+  setTheme(document.documentElement.dataset.theme);
+  const toggle = (open) => { menu.classList.toggle('open', open); themeBtn.setAttribute('aria-expanded', open); };
+  themeBtn.addEventListener('click', (e) => { e.stopPropagation(); toggle(!menu.classList.contains('open')); });
+  menu.addEventListener('click', (e) => { const b = e.target.closest('.theme-opt'); if (b) setTheme(b.dataset.theme); });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.theme-wrap')) toggle(false); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') toggle(false); });
+}
 
 // reading progress
 const bar = $('#progress');

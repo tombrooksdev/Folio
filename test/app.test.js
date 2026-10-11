@@ -56,3 +56,42 @@ test('login rejects bad password and logout works', async () => {
   assert.equal((await req('/login', { method: 'POST', form: { username: 'a', password: 'longenough' } })).loc, '/');
   close();
 });
+
+test('scrum: sprint lifecycle, drag/move, ordering, completion', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const mk = async (title, extra = {}) => (await req('/s/ENG/issues', { method: 'POST', form: { title, ...extra } })).loc.split('/')[2];
+  const a = await mk('Login page', { points: '3', type: 'story' });
+  const b = await mk('Fix crash', { points: '2', type: 'bug' });
+  const c = await mk('Write docs', { type: 'task' });
+
+  assert.match((await req('/s/ENG/board')).text, /No active sprint/);
+  await req('/s/ENG/sprints', { method: 'POST', form: { name: 'Sprint 1', goal: 'Ship login' } });
+  const sprintId = (await req('/s/ENG/backlog')).text.match(/data-sprint="(\d+)"/)[1];
+  for (const id of [a, b]) await req(`/issues/${id}/move`, { method: 'POST', form: { sprint: sprintId, before: '' } });
+  assert.equal((await req(`/sprints/${sprintId}/start`, { method: 'POST', form: { weeks: '2' } })).loc, '/s/ENG/board');
+  assert.equal((await req(`/sprints/${sprintId}/start`, { method: 'POST', form: {} })).status, 400); // already active
+
+  let board = (await req('/s/ENG/board')).text;
+  assert.match(board, /Sprint 1/); assert.match(board, /Login page/); assert.doesNotMatch(board, /Write docs/);
+
+  await req(`/issues/${a}/move`, { method: 'POST', form: { status: 'done', before: '' } });
+  board = (await req('/s/ENG/board')).text;
+  assert.match(board, /<b>3<\/b> of <b>5<\/b> points done/);
+
+  // reorder within a column: put b before a in the done column
+  await req(`/issues/${b}/move`, { method: 'POST', form: { status: 'done', before: a } });
+  const done = (await req('/s/ENG/board')).text.split('data-status="done"')[1];
+  assert.ok(done.indexOf('Fix crash') < done.indexOf('Login page'));
+
+  assert.equal((await req(`/issues/${c}/move`, { method: 'POST', form: { sprint: '9999' } })).status, 400); // unknown sprint
+
+  await req(`/i/${a}/comment`, { method: 'POST', form: { body: 'looks **good**' } });
+  assert.match((await req(`/i/${a}`)).text, /<strong>good<\/strong>/);
+
+  await req(`/sprints/${sprintId}/complete`, { method: 'POST' });
+  assert.match((await req('/s/ENG/board')).text, /No active sprint/);
+  assert.match((await req('/s/ENG/backlog')).text, /Write docs/);
+  close();
+});

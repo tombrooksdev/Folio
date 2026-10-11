@@ -44,6 +44,43 @@ export function openDb(file) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS versions_page ON versions(page_id, id DESC);
+    CREATE TABLE IF NOT EXISTS sprints (
+      id INTEGER PRIMARY KEY,
+      space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      goal TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT 'planned' CHECK (state IN ('planned','active','closed')),
+      weeks INTEGER NOT NULL DEFAULT 2,
+      started_at TEXT,
+      ends_at TEXT,
+      closed_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS issues (
+      id INTEGER PRIMARY KEY,
+      space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      num INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      type TEXT NOT NULL DEFAULT 'story' CHECK (type IN ('story','bug','task')),
+      priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('high','medium','low')),
+      status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo','doing','done')),
+      points INTEGER,
+      sprint_id INTEGER REFERENCES sprints(id) ON DELETE SET NULL,
+      assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      rank REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (space_id, num)
+    );
+    CREATE INDEX IF NOT EXISTS issues_space ON issues(space_id, sprint_id, status, rank);
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY,
+      issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+      author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
       title, body, content='pages', content_rowid='id', tokenize='porter unicode61'
     );
