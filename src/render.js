@@ -50,6 +50,16 @@ const PATHS = {
   save: 'M5 3h11l3 3v15H5zM8 3v5h7M8 21v-7h8v7',
   home: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',
   sidebar: 'M4 5h16v14H4zM9 5v14',
+  board: 'M4 4h5v16H4zM10 4h5v10h-5zM16 4h4v13h-4z',
+  backlog: 'M4 6h16M4 12h16M4 18h10',
+  bug: 'M9 8a3 3 0 016 0v7a3 3 0 01-6 0zM9 12H5m14 0h-4M8 6L5 4m11 2l3-2M9 17l-4 2m10-2l4 2',
+  story: 'M7 3h10v18l-5-4-5 4z',
+  task: 'M5 5h14v14H5zM9 12l2 2 4-4',
+  up: 'M6 15l6-6 6 6',
+  down: 'M6 9l6 6 6-6',
+  play: 'M7 5l12 7-12 7z',
+  flag: 'M5 21V4m0 0h11l-2 4 2 4H5',
+  palette: 'M12 3a9 9 0 100 18c1.1 0 1.8-.9 1.5-2-.3-1 .3-2 1.4-2H17a4 4 0 004-4c0-5-4-10-9-10zM7.5 12h.01M10 7.5h.01M15 7.5h.01',
   logo: 'M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2zM14 3v6h6M8 13h8M8 17h5',
 };
 export const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${PATHS[name]}"/></svg>`;
@@ -66,12 +76,12 @@ export function layout({ title, user, body, sidebar = '', toc = false, bare = fa
 <body>
 <div class="progress" id="progress"></div>
 ${bare ? body : `<header class="top">
-  <a class="brand" href="/"><span class="logo">${icon('logo')}</span>Folio</a>
+  <a class="brand" href="/">folio<i>.</i></a>
   ${
     user
       ? `<button class="icon-btn" type="button" id="side-toggle" aria-label="Toggle sidebar">${icon('sidebar')}</button>
          <button class="cmdk-btn ghost" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search pages</span><kbd>Ctrl K</kbd></button>
-         <button class="icon-btn" type="button" id="theme" aria-label="Toggle theme">${icon('moon')}</button>
+         <div class="theme-wrap"><button class="icon-btn" type="button" id="theme" aria-label="Choose theme" aria-haspopup="true" aria-expanded="false">${icon('palette')}</button><div class="theme-menu" id="theme-menu" role="menu"></div></div>
          <span class="avatar" title="${esc(user.username)}">${initial}</span>
          <form method="post" action="/logout"><button class="ghost sm">Sign out</button></form>`
       : '<span class="spacer"></span>'

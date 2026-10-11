@@ -4,8 +4,10 @@ import {
   COOKIE, hashPassword, verifyPassword, createSession, userForToken, destroySession,
   loginAllowed, recordFailedLogin,
 } from './auth.js';
+import { mountBoard } from './board.js';
 import { renderMarkdown, esc, layout, treeHtml, icon, hueClass } from './render.js';
 
+const VERSION = '0.3.0';
 const parseCookies = (h = '') =>
   Object.fromEntries(h.split(';').map((c) => c.trim().split('=')).filter((p) => p[0]).map(([k, ...v]) => [k, v.join('=')]));
 
@@ -34,7 +36,7 @@ export function createApp(db, { secureCookies = false } = {}) {
 
   const userCount = () => db.prepare('SELECT COUNT(*) n FROM users').get().n;
   const page = (res, opts) => {
-    if (opts.user && opts.sidebar === undefined && !opts.bare) opts.sidebar = sidebar(opts.space ?? null, opts.current);
+    if (opts.user && opts.sidebar === undefined && !opts.bare) opts.sidebar = sidebar(opts.space ?? null, opts.current, opts.section);
     res.send(layout(opts));
   };
   const setCookie = (res, token, maxAge) =>
@@ -77,12 +79,16 @@ export function createApp(db, { secureCookies = false } = {}) {
     res.redirect('/login');
   });
 
+  app.get('/healthz', (req, res) => { db.prepare('SELECT 1').get(); res.type('text').send('ok'); });
+
   // Everything below needs a signed-in user.
   app.use((req, res, next) => {
     if (!userCount()) return res.redirect('/setup');
     if (!req.user) return res.redirect('/login');
     next();
   });
+
+  mountBoard(app, { db, page: (res, o) => page(res, o), getSpace: (k) => getSpace(k) });
 
   // ---- spaces ----
   app.get('/', (req, res) => {
@@ -264,7 +270,7 @@ export function createApp(db, { secureCookies = false } = {}) {
   function spaceTree(spaceId) { return buildTree(db.prepare('SELECT id, parent_id, title FROM pages WHERE space_id = ?').all(spaceId)); }
   function spaceOf(p) { return db.prepare('SELECT * FROM spaces WHERE id = ?').get(p.space_id); }
   // Confluence-style nav: Home, then every space; the current space expands into its page tree.
-  function sidebar(space, currentId) {
+  function sidebar(space, currentId, section) {
     const spaces = db.prepare('SELECT * FROM spaces ORDER BY name').all();
     const cur = currentId ? getPage(currentId) : null;
     const open = new Set(cur ? [cur.id, ...breadcrumbs(cur).map((c) => c.id)] : []);
@@ -273,9 +279,10 @@ export function createApp(db, { secureCookies = false } = {}) {
       <ul class="spaces">${spaces.map((s) => {
         const here = space && s.id === space.id;
         return `<li class="space${here ? ' here' : ''}"><a class="space-link" href="/s/${esc(s.key)}"><span class="mono-tile ${hueClass(s.key)}">${esc(s.key.slice(0, 1))}</span>${esc(s.name)}</a>${here
-          ? `<div class="space-body"><a class="create" href="/s/${esc(s.key)}/new${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
+          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/new${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
           : ''}</li>`;
-      }).join('')}</ul>`;
+      }).join('')}</ul>
+      <p class="credit">folio v${VERSION} · by <a href="https://tombrooks.dev" target="_blank" rel="noopener">tombrooks.dev</a></p>`;
   }
   function breadcrumbs(p) {
     const out = [];
@@ -316,7 +323,7 @@ function emptyArt() {
 function authForm(heading, action, error) {
   const setup = action === '/setup';
   return `<div class="auth">
-    <section class="auth-art"><a class="brand" href="/"><span class="logo">${icon('logo')}</span>Folio</a><div><blockquote>Write it down once. Find it in seconds.</blockquote><small>Self-hosted. Your data stays in one file.</small></div></section>
+    <section class="auth-art"><a class="brand" href="/">folio<i>.</i></a><div><blockquote>Write it down once. <em>Find it</em> in seconds.</blockquote><small>Self-hosted. Your data stays in one file. By tombrooks.dev</small></div></section>
     <section class="auth-form"><form class="form" method="post" action="${action}">
       <h1>${esc(heading)}</h1><p class="muted">${setup ? 'This first account becomes the administrator.' : 'Welcome back.'}</p>
       ${error ? `<p class="err" role="alert">${esc(error)}</p>` : ''}

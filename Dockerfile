@@ -4,6 +4,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY src ./src
 COPY public ./public
+COPY scripts ./scripts
 ENV FOLIO_DB=/data/folio.db PORT=3000
 VOLUME /data
 EXPOSE 3000
