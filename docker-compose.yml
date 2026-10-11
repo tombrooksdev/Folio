@@ -1,0 +1,10 @@
+services:
+  folio:
+    build: .
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    volumes: ["./data:/data"]
+    environment:
+      # Set both to 1 when serving over HTTPS behind a reverse proxy (Caddy, nginx, Plesk).
+      FOLIO_SECURE_COOKIES: "0"
+      FOLIO_TRUST_PROXY: "0"
