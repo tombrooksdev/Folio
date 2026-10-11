@@ -92,3 +92,19 @@ if (doc) {
     pre.append(b);
   });
 }
+
+// sidebar: collapse the whole nav, expand/collapse page tree nodes (state remembered per browser)
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+document.body.classList.toggle('side-collapsed', load('folio-side-collapsed', false));
+$('#side-toggle')?.addEventListener('click', () => save('folio-side-collapsed', document.body.classList.toggle('side-collapsed')));
+const openNodes = new Set(load('folio-open-nodes', []));
+$$('.tree li.has-kids').forEach((li) => {
+  if (openNodes.has(li.dataset.id)) { li.classList.add('open'); li.querySelector(':scope > .twisty').setAttribute('aria-expanded', 'true'); }
+  li.querySelector(':scope > .twisty').addEventListener('click', (e) => {
+    const isOpen = li.classList.toggle('open');
+    e.currentTarget.setAttribute('aria-expanded', isOpen);
+    isOpen ? openNodes.add(li.dataset.id) : openNodes.delete(li.dataset.id);
+    save('folio-open-nodes', [...openNodes]);
+  });
+});

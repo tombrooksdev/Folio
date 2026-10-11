@@ -12,7 +12,7 @@ const parseCookies = (h = '') =>
 export function createApp(db, { secureCookies = false } = {}) {
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.static(new URL('../public', import.meta.url).pathname, { maxAge: '1h' }));
+  app.use(express.static(new URL('../public', import.meta.url).pathname, { setHeaders: (res, f) => res.set('Cache-Control', f.endsWith('.woff2') ? 'public, max-age=31536000, immutable' : 'no-cache') }));
   app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 
   app.use((req, res, next) => {
@@ -33,7 +33,10 @@ export function createApp(db, { secureCookies = false } = {}) {
   });
 
   const userCount = () => db.prepare('SELECT COUNT(*) n FROM users').get().n;
-  const page = (res, opts) => res.send(layout(opts));
+  const page = (res, opts) => {
+    if (opts.user && opts.sidebar === undefined && !opts.bare) opts.sidebar = sidebar(opts.space ?? null, opts.current);
+    res.send(layout(opts));
+  };
   const setCookie = (res, token, maxAge) =>
     res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: secureCookies, maxAge, path: '/' });
 
@@ -85,32 +88,20 @@ export function createApp(db, { secureCookies = false } = {}) {
   app.get('/', (req, res) => {
     const spaces = db.prepare('SELECT s.*, (SELECT COUNT(*) FROM pages WHERE space_id = s.id) n FROM spaces s ORDER BY name').all();
     const recent = db.prepare(`SELECT p.id, p.title, p.updated_at, s.name space FROM pages p JOIN spaces s ON s.id = p.space_id ORDER BY p.updated_at DESC, p.id DESC LIMIT 6`).all();
-    const total = spaces.reduce((a, s) => a + s.n, 0);
-    const hour = new Date().getHours();
-    const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     page(res, {
       title: 'Home', user: req.user,
-      body: `<section class="hero">
-          <span class="orb a"></span><span class="orb b"></span>
-          <h1>${greet}, ${esc(req.user.username)}.</h1>
-          <p>Your team's knowledge, written down once and found in seconds.</p>
-          <div class="row"><button class="btn" type="button" id="cmdk-open-hero">${icon('search')}Search everything</button></div>
-          <div class="stats"><div><b>${spaces.length}</b><span>Spaces</span></div><div><b>${total}</b><span>Pages</span></div></div>
-        </section>
-        <div class="section-head"><h2>Spaces</h2></div>
-        <div class="grid">
-          ${spaces.map((s, i) => `<a class="space-card ${hueClass(s.key)}" href="/s/${esc(s.key)}" data-i="${i}">
-            <div class="tile">${esc(s.key.slice(0, 2))}</div><span class="arrow">${icon('arrow')}</span>
-            <h3>${esc(s.name)}</h3><p class="muted">${s.n} ${s.n === 1 ? 'page' : 'pages'}</p></a>`).join('')}
-          <form class="space-card new-space" method="post" action="/spaces" data-i="${spaces.length}">
-            <strong>New space</strong>
-            <input name="name" placeholder="Name, e.g. Engineering" aria-label="Space name" required>
-            <input name="key" placeholder="Key, e.g. ENG" aria-label="Space key" pattern="[A-Za-z0-9\\-]{2,12}" required>
-            <button>${icon('plus')}Create space</button>
-          </form>
-        </div>
+      body: `<div class="page-head"><div><span class="eyebrow">Workspace</span><h1 class="page-title">Spaces</h1></div>
+          <a class="btn" href="#new-space">${icon('plus')}New space</a></div>
+        <div class="list">${spaces.map((s) => `<a class="row-item" href="/s/${esc(s.key)}"><span class="key">${esc(s.key.slice(0, 3))}</span><span class="t">${esc(s.name)}</span><span class="s">${s.n} ${s.n === 1 ? 'page' : 'pages'}</span></a>`).join('')}</div>
+        ${spaces.length ? '' : `<div class="empty">${emptyArt()}<h3>No spaces yet</h3><p>A space holds the pages for one team or project.</p></div>`}
         ${recent.length ? `<div class="section-head"><h2>Recently updated</h2></div>
-        <div class="row-list">${recent.map((r, i) => `<a class="row-item" href="/p/${r.id}" data-i="${i}">${icon('file')}<span class="t">${esc(r.title)}</span><span class="s">${esc(r.space)}<br>${esc(r.updated_at.slice(0, 16))}</span></a>`).join('')}</div>` : ''}`,
+        <div class="list">${recent.map((r) => `<a class="row-item" href="/p/${r.id}">${icon('file')}<span class="t">${esc(r.title)}</span><span class="s">${esc(r.space)} · ${esc(r.updated_at.slice(0, 16))}</span></a>`).join('')}</div>` : ''}
+        <div class="section-head" id="new-space"><h2>Create a space</h2></div>
+        <form class="new-space" method="post" action="/spaces">
+          <input name="name" placeholder="Name, e.g. Engineering" aria-label="Space name" required>
+          <input name="key" placeholder="Key, e.g. ENG" aria-label="Space key" pattern="[A-Za-z0-9\\-]{2,12}" required>
+          <button>Create space</button>
+        </form>`,
     });
   });
   app.post('/spaces', (req, res) => {
@@ -129,7 +120,7 @@ export function createApp(db, { secureCookies = false } = {}) {
     if (!space) return res.status(404).send('No such space');
     const tree = spaceTree(space.id);
     page(res, {
-      title: space.name, user: req.user, sidebar: sidebar(space, tree), toc: false,
+      title: space.name, user: req.user, space, toc: false,
       body: `<div class="article-head"><span class="eyebrow">Space · ${esc(space.key)}</span><h1 class="page-title">${esc(space.name)}</h1>
         <div class="actions"><a class="btn" href="/s/${esc(space.key)}/new">${icon('plus')}New page</a></div></div>
         ${tree.length ? `<div class="row-list">${tree.map((n, i) => `<a class="row-item" href="/p/${n.id}" data-i="${i}">${icon('file')}<span class="t">${esc(n.title)}</span><span class="s">${n.children.length ? n.children.length + ' sub-pages' : ''}</span></a>`).join('')}</div>`
@@ -165,7 +156,7 @@ export function createApp(db, { secureCookies = false } = {}) {
     const crumbs = breadcrumbs(p);
     const author = p.updated_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(p.updated_by)?.username : null;
     page(res, {
-      title: p.title, user: req.user, sidebar: sidebar(space, spaceTree(space.id), p.id),
+      title: p.title, user: req.user, space, current: p.id, toc: true,
       body: `<header class="article-head">
           <nav class="crumbs" aria-label="Breadcrumb"><a href="/s/${esc(space.key)}">${esc(space.name)}</a>${crumbs.map((c) => `${icon('chevron')}<a href="/p/${c.id}">${esc(c.title)}</a>`).join('')}</nav>
           <h1 class="page-title">${esc(p.title)}</h1>
@@ -215,7 +206,7 @@ export function createApp(db, { secureCookies = false } = {}) {
     if (!p) return res.status(404).send('No such page');
     const vs = db.prepare(`SELECT v.id, v.title, v.created_at, u.username FROM versions v LEFT JOIN users u ON u.id = v.edited_by WHERE page_id = ? ORDER BY v.id DESC`).all(p.id);
     page(res, {
-      title: `History: ${p.title}`, user: req.user,
+      title: `History: ${p.title}`, user: req.user, space: spaceOf(p), current: p.id,
       body: `<span class="eyebrow">Version history</span><h1 class="page-title"><a href="/p/${p.id}">${esc(p.title)}</a></h1>
         <div class="row-list">${vs.map((v, i) => `<a class="row-item" href="/p/${p.id}/history/${v.id}" data-i="${i}">${icon('clock')}<span class="t">${esc(v.title)}</span><span class="s">${esc(v.created_at.slice(0, 16))} UTC${v.username ? `<br>${esc(v.username)}` : ''}</span></a>`).join('') || `<div class="empty">${emptyArt()}<h3>No earlier versions</h3><p class="muted">Versions are saved each time you edit.</p></div>`}</div>`,
     });
@@ -225,7 +216,7 @@ export function createApp(db, { secureCookies = false } = {}) {
     const v = db.prepare('SELECT * FROM versions WHERE id = ? AND page_id = ?').get(Number(req.params.vid), Number(req.params.id));
     if (!p || !v) return res.status(404).send('No such version');
     page(res, {
-      title: v.title, user: req.user,
+      title: v.title, user: req.user, space: spaceOf(p), current: p.id,
       body: `<span class="eyebrow">Version from ${esc(v.created_at)} UTC</span><h1 class="page-title">${esc(v.title)}</h1>
         <form method="post" action="/p/${p.id}/restore/${v.id}" class="actions"><button>Restore this version</button><a class="btn ghost" href="/p/${p.id}/history">Back</a></form>
         <article class="doc">${renderMarkdown(v.body)}</article>`,
@@ -271,8 +262,20 @@ export function createApp(db, { secureCookies = false } = {}) {
   function getSpace(key) { return db.prepare('SELECT * FROM spaces WHERE key = ?').get(String(key).toUpperCase()); }
   function getPage(id) { return Number.isInteger(id) ? db.prepare('SELECT * FROM pages WHERE id = ?').get(id) : undefined; }
   function spaceTree(spaceId) { return buildTree(db.prepare('SELECT id, parent_id, title FROM pages WHERE space_id = ?').all(spaceId)); }
-  function sidebar(space, tree, currentId) {
-    return `<a class="side-head" href="/s/${esc(space.key)}"><span class="tile-sm logo ${hueClass(space.key)}">${esc(space.key.slice(0, 1))}</span>${esc(space.name)}</a>${treeHtml(tree, currentId)}<a class="add" href="/s/${esc(space.key)}/new">${icon('plus')}New page</a>`;
+  function spaceOf(p) { return db.prepare('SELECT * FROM spaces WHERE id = ?').get(p.space_id); }
+  // Confluence-style nav: Home, then every space; the current space expands into its page tree.
+  function sidebar(space, currentId) {
+    const spaces = db.prepare('SELECT * FROM spaces ORDER BY name').all();
+    const cur = currentId ? getPage(currentId) : null;
+    const open = new Set(cur ? [cur.id, ...breadcrumbs(cur).map((c) => c.id)] : []);
+    return `<a class="nav-link${space ? '' : ' cur'}" href="/">${icon('home')}Home</a>
+      <div class="nav-label"><span>Spaces</span><a href="/#new-space" title="New space" aria-label="New space">${icon('plus')}</a></div>
+      <ul class="spaces">${spaces.map((s) => {
+        const here = space && s.id === space.id;
+        return `<li class="space${here ? ' here' : ''}"><a class="space-link" href="/s/${esc(s.key)}"><span class="mono-tile ${hueClass(s.key)}">${esc(s.key.slice(0, 1))}</span>${esc(s.name)}</a>${here
+          ? `<div class="space-body"><a class="create" href="/s/${esc(s.key)}/new${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
+          : ''}</li>`;
+      }).join('')}</ul>`;
   }
   function breadcrumbs(p) {
     const out = [];
@@ -283,7 +286,7 @@ export function createApp(db, { secureCookies = false } = {}) {
   function editorPage(req, res, space, p, action, heading, existingId) {
     const tb = (name, label, sep) => `${sep ? '<span class="sep"></span>' : ''}<button type="button" class="ghost" data-md="${name}" title="${label}" aria-label="${label}">${icon(name)}</button>`;
     page(res, {
-      title: heading, user: req.user, sidebar: sidebar(space, spaceTree(space.id), existingId), toc: false,
+      title: heading, user: req.user, space, current: existingId, toc: false,
       body: `<span class="eyebrow">${esc(heading)}</span>
         <form method="post" action="${action}" id="edit-form">
           <input type="hidden" name="parent_id" value="${esc(p.parent_id ?? '')}">
@@ -307,15 +310,13 @@ export function createApp(db, { secureCookies = false } = {}) {
 }
 
 function emptyArt() {
-  return `<svg class="art" viewBox="0 0 140 110" aria-hidden="true"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs>
-    <rect x="30" y="14" width="80" height="84" rx="10" fill="url(#g)" opacity=".18"/><rect x="38" y="8" width="80" height="84" rx="10" fill="url(#g)"/>
-    <rect x="52" y="28" width="40" height="6" rx="3" fill="#fff" opacity=".9"/><rect x="52" y="44" width="52" height="5" rx="2.5" fill="#fff" opacity=".6"/><rect x="52" y="56" width="46" height="5" rx="2.5" fill="#fff" opacity=".6"/><rect x="52" y="68" width="30" height="5" rx="2.5" fill="#fff" opacity=".6"/></svg>`;
+  return `<svg class="art" viewBox="0 0 84 84" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M22 10h28l14 14v50H22z"/><path d="M50 10v14h14M32 42h22M32 52h22M32 62h14"/></svg>`;
 }
 
 function authForm(heading, action, error) {
   const setup = action === '/setup';
   return `<div class="auth">
-    <section class="auth-art"><span class="orb a"></span><span class="orb b"></span><h2>Everything your team knows, in one place.</h2><p>Spaces, pages and search that belong to you. Self-hosted, private, no subscription.</p></section>
+    <section class="auth-art"><a class="brand" href="/"><span class="logo">${icon('logo')}</span>Folio</a><div><blockquote>Write it down once. Find it in seconds.</blockquote><small>Self-hosted. Your data stays in one file.</small></div></section>
     <section class="auth-form"><form class="form" method="post" action="${action}">
       <h1>${esc(heading)}</h1><p class="muted">${setup ? 'This first account becomes the administrator.' : 'Welcome back.'}</p>
       ${error ? `<p class="err" role="alert">${esc(error)}</p>` : ''}

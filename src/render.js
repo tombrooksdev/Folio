@@ -25,7 +25,7 @@ export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // Deterministic colour class per space key, so each space keeps its own hue.
-export const hueClass = (key) => 'h' + ([...String(key)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % 12);
+export const hueClass = (key) => 'h' + ([...String(key)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) * 2654435761 % 4294967296 / 4294967296 * 12 | 0);
 
 const PATHS = {
   search: 'M21 21l-4.3-4.3M11 18a7 7 0 100-14 7 7 0 000 14z',
@@ -48,11 +48,13 @@ const PATHS = {
   quote: 'M7 7h4v4c0 3-2 5-4 5M15 7h4v4c0 3-2 5-4 5',
   check: 'M5 13l4 4L19 7',
   save: 'M5 3h11l3 3v15H5zM8 3v5h7M8 21v-7h8v7',
+  home: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',
+  sidebar: 'M4 5h16v14H4zM9 5v14',
   logo: 'M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2zM14 3v6h6M8 13h8M8 17h5',
 };
 export const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${PATHS[name]}"/></svg>`;
 
-export function layout({ title, user, body, sidebar = '', toc = true, bare = false }) {
+export function layout({ title, user, body, sidebar = '', toc = false, bare = false }) {
   const initial = user ? esc(user.username.slice(0, 1).toUpperCase()) : '';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -67,7 +69,8 @@ ${bare ? body : `<header class="top">
   <a class="brand" href="/"><span class="logo">${icon('logo')}</span>Folio</a>
   ${
     user
-      ? `<button class="cmdk-btn ghost" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search pages</span><kbd>Ctrl K</kbd></button>
+      ? `<button class="icon-btn" type="button" id="side-toggle" aria-label="Toggle sidebar">${icon('sidebar')}</button>
+         <button class="cmdk-btn ghost" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search pages</span><kbd>Ctrl K</kbd></button>
          <button class="icon-btn" type="button" id="theme" aria-label="Toggle theme">${icon('moon')}</button>
          <span class="avatar" title="${esc(user.username)}">${initial}</span>
          <form method="post" action="/logout"><button class="ghost sm">Sign out</button></form>`
@@ -86,12 +89,14 @@ ${bare ? body : `<header class="top">
 </body></html>`;
 }
 
-export function treeHtml(nodes, currentId) {
+export function treeHtml(nodes, currentId, open = new Set()) {
   if (!nodes.length) return '';
-  return `<ul>${nodes
-    .map(
-      (n) =>
-        `<li><a href="/p/${n.id}"${n.id === currentId ? ' class="cur" aria-current="page"' : ''}>${esc(n.title)}</a>${treeHtml(n.children, currentId)}</li>`
-    )
+  return `<ul class="tree">${nodes
+    .map((n) => {
+      const kids = n.children.length > 0;
+      const isOpen = open.has(n.id);
+      return `<li${kids ? ` class="has-kids${isOpen ? ' open' : ''}" data-id="${n.id}"` : ''}>
+        ${kids ? `<button type="button" class="twisty" aria-label="Expand ${esc(n.title)}" aria-expanded="${isOpen}">${icon('chevron')}</button>` : '<span class="twisty-gap"></span>'}<a href="/p/${n.id}"${n.id === currentId ? ' class="cur" aria-current="page"' : ''}>${esc(n.title)}</a>${treeHtml(n.children, currentId, open)}</li>`;
+    })
     .join('')}</ul>`;
 }
