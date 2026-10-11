@@ -25,7 +25,7 @@ export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // Deterministic colour class per space key, so each space keeps its own hue.
-export const hueClass = (key) => 'h' + ([...String(key)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) * 2654435761 % 4294967296 / 4294967296 * 12 | 0);
+export const hueClass = (key) => "h" + (Math.abs([...String(key)].reduce((a, c) => Math.imul(a ^ c.charCodeAt(0), 16777619), 2166136261)) % 12);
 
 const PATHS = {
   search: 'M21 21l-4.3-4.3M11 18a7 7 0 100-14 7 7 0 000 14z',
