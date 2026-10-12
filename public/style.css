@@ -73,9 +73,11 @@ main{min-width:0;animation:in .25s ease both}
 
 /* ---------- sidebar (Confluence-style space navigation) ---------- */
 .side{position:sticky;top:52px;height:calc(100vh - 52px);overflow:auto;padding:.9rem .6rem 2rem;border-right:1px solid var(--line);font-size:.88rem;background:var(--bg)}
-.side-collapsed .shell.has-side{grid-template-columns:0 minmax(0,1fr) 15rem}
-.side-collapsed .shell.has-side.no-toc{grid-template-columns:0 minmax(0,1fr)}
 .side-collapsed .side{display:none}
+/* a hidden sidebar leaves the grid, so the remaining children must claim the first track */
+.side-collapsed .shell.has-side{grid-template-columns:minmax(0,1fr) 15rem}
+.side-collapsed .shell.has-side.no-toc{grid-template-columns:minmax(0,1fr)}
+@media(max-width:1180px){.side-collapsed .shell.has-side{grid-template-columns:minmax(0,1fr)}}
 .side ul{list-style:none;margin:0;padding:0}
 .nav-link{display:flex;align-items:center;gap:.6rem;padding:.35rem .6rem;border-radius:6px;text-decoration:none;color:var(--fg-2);font-weight:550}
 .nav-link:hover{background:var(--sunken)}.nav-link.cur{background:var(--sunken);color:var(--fg)}

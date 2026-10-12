@@ -111,9 +111,9 @@ Folio copies what people actually use in Confluence and Jira and leaves out what
 |---|---|
 | ![Swimlanes](docs/screenshots/swimlanes.png) | ![Diff](docs/screenshots/diff.png) |
 
-| Home with the getting-started checklist |
-|---|
-| ![Home](docs/screenshots/home.png) |
+| Home with the getting-started checklist | Full width with the sidebar hidden |
+|---|---|
+| ![Home](docs/screenshots/home.png) | ![Sidebar hidden](docs/screenshots/sidebar-collapsed.png) |
 
 ### Themes
 
@@ -256,6 +256,16 @@ A space can have one active sprint at a time.
 
 Use your space key in commit messages, branch names or PR titles, for example `ENG-12 Add email verification`. Folio links those keys back to the issue and lists the activity in the issue's **Development** panel. Responses are cached for five minutes. Set `FOLIO_GITHUB_TOKEN` for private repositories.
 
+## Notifications
+
+The bell in the top bar shows what happened since you last looked: new pages, new issues, issues assigned to you, `@mentions`, sprints starting and completing, and changes or comments on anything you **watch**. You watch what you create, edit, comment on or are assigned, and can **Watch** or **Unwatch** any page or issue. Choose what you hear about, and turn on browser desktop alerts, in **Notification settings**. Rapid edits to the same item are combined into one notification, and you are never notified about your own actions.
+
+To post team events (new pages, new issues, sprints) to a chat channel, set `FOLIO_WEBHOOK_URL` to a Slack, Mattermost, Discord or Teams incoming-webhook URL, and `FOLIO_PUBLIC_URL` so the messages include links.
+
+## Learning Folio
+
+New people get a short **tour** the first time they sign in (replay it from the `?` help menu). The **Learn** area has six courses and a one-click **practice space** with sample pages and a running sprint. The home page shows a **getting-started checklist** that ticks itself off. Lessons are Markdown files in `src/learn/`, so you can edit them or add your own.
+
 ## Keyboard shortcuts
 
 | Keys | Action |
@@ -274,21 +284,28 @@ Use your space key in commit messages, branch names or PR titles, for example `E
 
 ```
 src/
-  server.js    entry point and env config
-  app.js       auth, spaces, pages, history, search routes
-  board.js     sprints, issues, backlog, board and issue search routes
-  epics.js     epics and their progress
-  issues.js    shared issue queries and HTML fragments
-  reports.js   burndown, velocity and sprint history
-  files.js     attachments (upload, safe serving, cleanup)
-  comments.js  page comments
-  github.js    read-only GitHub client and routes
-  db.js        schema, FTS5 triggers, helpers
-  auth.js      scrypt passwords, sessions, login throttle
-  render.js    Markdown -> sanitised HTML, layout, icons
-public/        CSS (themes live here), client JS, bundled fonts
-scripts/       add-user and backup
-test/          integration tests (node:test)
+  server.js     entry point and environment configuration
+  app.js        auth, spaces, pages, history, templates, labels, stars, search
+  board.js      sprints, issues, backlog, board, swimlanes, issue search
+  epics.js      epics and their progress
+  issues.js     shared issue queries, HTML fragments and change history
+  reports.js    burndown, velocity and sprint history
+  files.js      attachments (upload, safe serving, cleanup)
+  comments.js   page comments
+  github.js     read-only GitHub client and routes
+  notify.js     notifications, watching, @mentions, preferences, webhook
+  learn.js      training area, checklist, hints, practice space, per-user flags
+  learn/        the lessons (Markdown) and course index
+  templates.js  built-in page templates
+  diff.js       line diff for comparing versions
+  db.js         schema, migrations, search index
+  auth.js       scrypt passwords, sessions, login throttle
+  render.js     Markdown to sanitised HTML, layout, icons
+public/         CSS (themes live here), client JavaScript, bundled fonts
+scripts/        add-user and backup
+packaging/      Windows installer, Linux packages and the build script
+docs/           installation guide and screenshots
+test/           integration tests (node:test)
 ```
 
 The stack is deliberately plain: Express, server-rendered HTML, a little vanilla JavaScript, SQLite. There is no build step and no front-end framework.

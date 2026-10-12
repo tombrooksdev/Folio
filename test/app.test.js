@@ -542,3 +542,15 @@ test('learn: courses, lessons, progress, checklist, tour flag, hints, practice s
   assert.equal((await req('/s/PRACTICE/board')).status, 404);
   close();
 });
+
+test('layout: a hidden sidebar leaves the grid, so the collapsed rules must not reserve a column for it', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
+  const rule = (sel) => css.match(new RegExp(sel.replace(/[.[\]]/g, '\\$&') + '\\{([^}]*)\\}'))?.[1] ?? '';
+  assert.match(rule('.side-collapsed .side'), /display:none/);
+  // first track must be the content column, never a zero-width placeholder
+  for (const sel of ['.side-collapsed .shell.has-side', '.side-collapsed .shell.has-side.no-toc']) {
+    const cols = rule(sel).match(/grid-template-columns:([^;]+)/)?.[1] ?? '';
+    assert.ok(cols.trim().startsWith('minmax(0,1fr)'), `${sel} -> ${cols}`);
+  }
+});

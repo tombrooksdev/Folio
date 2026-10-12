@@ -6,6 +6,14 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.8.1] - 2026-10-12
+
+### Fixed
+- Hiding the sidebar no longer breaks the page layout. The content used to collapse into a zero-width column; it now takes the full width (keeping the "On this page" outline on wide screens). A regression test covers the layout rules.
+
+### Changed
+- README: notifications, the training area and installation are documented, the project layout lists every module, and the screenshots are refreshed.
+
 ## [0.8.0] - 2026-10-12
 
 A training area, a first-login tour, and notifications.
@@ -172,7 +180,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/tombrooksdev/Folio/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/tombrooksdev/Folio/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/tombrooksdev/Folio/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/tombrooksdev/Folio/compare/v0.5.0...v0.6.0
