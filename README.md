@@ -103,7 +103,15 @@ Folio copies what people actually use in Confluence and Jira and leaves out what
 |---|---|
 | ![Epic](docs/screenshots/epic.png) | ![Code](docs/screenshots/code.png) |
 
-| Home |
+| Learn (training area) | Notifications |
+|---|---|
+| ![Learn](docs/screenshots/learn.png) | ![Notifications](docs/screenshots/notifications.png) |
+
+| Swimlanes | Compare versions |
+|---|---|
+| ![Swimlanes](docs/screenshots/swimlanes.png) | ![Diff](docs/screenshots/diff.png) |
+
+| Home with the getting-started checklist |
 |---|
 | ![Home](docs/screenshots/home.png) |
 
