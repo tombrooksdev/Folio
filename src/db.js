@@ -123,9 +123,10 @@ export function openDb(file) {
     CREATE INDEX IF NOT EXISTS issue_labels_label ON issue_labels(label);
     CREATE TABLE IF NOT EXISTS attachments (
       id INTEGER PRIMARY KEY,
-      space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      space_id INTEGER REFERENCES spaces(id) ON DELETE CASCADE,
       page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
       issue_id INTEGER REFERENCES issues(id) ON DELETE SET NULL,
+      task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
       filename TEXT NOT NULL,
       mime TEXT NOT NULL,
       size INTEGER NOT NULL,
@@ -286,6 +287,7 @@ export function openDb(file) {
   // Databases from before roles existed: the first user becomes the administrator.
   if (!db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get()) db.exec("UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users)");
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_username_nocase ON users (username COLLATE NOCASE)'); } catch { /* existing look-alike accounts: keep working, the app also checks case-insensitively */ }
+  upgradeAttachments(db);
   addColumn(db, 'issues', 'parent_id', 'INTEGER REFERENCES issues(id) ON DELETE SET NULL');
   addColumn(db, 'spaces', 'github_repo', 'TEXT');
   // Sprints that were started before burndown tracking existed get a starting snapshot from their current issues.
@@ -295,6 +297,31 @@ export function openDb(file) {
     FROM sprints s JOIN issues i ON i.sprint_id = s.id
     WHERE s.state = 'active' AND NOT EXISTS (SELECT 1 FROM sprint_log l WHERE l.sprint_id = s.id)`);
   return db;
+}
+
+// Before 0.10 an attachment always belonged to a space. Task attachments have no space, so the old table is rebuilt once.
+function upgradeAttachments(db) {
+  const cols = db.prepare('PRAGMA table_info(attachments)').all();
+  const old = cols.find((c) => c.name === 'space_id')?.notnull === 1;
+  if (!old && cols.some((c) => c.name === 'task_id')) { db.exec('CREATE INDEX IF NOT EXISTS attachments_task ON attachments(task_id)'); return; }
+  tx(db, () => {
+    db.exec(`CREATE TABLE attachments_new (
+      id INTEGER PRIMARY KEY,
+      space_id INTEGER REFERENCES spaces(id) ON DELETE CASCADE,
+      page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
+      issue_id INTEGER REFERENCES issues(id) ON DELETE SET NULL,
+      task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+      filename TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, stored TEXT NOT NULL,
+      uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      INSERT INTO attachments_new (id, space_id, page_id, issue_id, filename, mime, size, stored, uploaded_by, created_at)
+        SELECT id, space_id, page_id, issue_id, filename, mime, size, stored, uploaded_by, created_at FROM attachments;
+      DROP TABLE attachments;
+      ALTER TABLE attachments_new RENAME TO attachments;
+      CREATE INDEX attachments_owner ON attachments(page_id, issue_id);
+      `);
+  });
+  db.exec('CREATE INDEX IF NOT EXISTS attachments_task ON attachments(task_id)');
 }
 
 function addColumn(db, table, column, definition) {

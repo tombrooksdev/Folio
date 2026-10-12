@@ -70,7 +70,7 @@ Folio follows the conventions people already know from tools like Confluence and
 - Day totals ("3h 15m planned") that turn amber when a day is over your capacity
 - Private, shared and team **lists**; assigning a task notifies the person and tells you when it is done
 - A **week planner** where you drag a task onto a day to time-box it, and a calendar (`.ics`) export
-- **Add to my tasks** on any issue or page
+- **Add to my tasks** on any issue or page, files on tasks, and drag to reorder a list
 
 **GitHub (read-only)**
 - Link a repository to a space and browse its commits, pull requests, branches and README

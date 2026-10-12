@@ -6,6 +6,18 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.10.1] - 2026-10-12
+
+Finishing Tasks.
+
+### Added
+- **Files on tasks.** Drop or pick files in a task's pane (up to 20 per task). A task's files follow the task: a private list's files are 404 to everyone else, including administrators, and they are deleted from disk with the task or its list.
+- **Reorder tasks** in a list by dragging, or with **Move up** and **Move down** in the pane.
+- **Browser tests** for the Tasks page script (`test/browser.test.js`). They skip themselves unless Playwright and Chromium are installed.
+
+### Changed
+- The attachments table no longer requires a space, so a file can belong to a task. Existing databases are rebuilt once, in place, and keep every row.
+
 ## [0.10.0] - 2026-10-12
 
 **Tasks**: a calm personal and team to-do list, beside the wiki and the board. Built from [docs/specs/tasks.md](docs/specs/tasks.md), all three phases.
@@ -26,7 +38,6 @@ Nothing yet.
 
 ### Notes
 - Dates are plain dates and reminders are stored in UTC. The browser's time zone is sent in a small `tz` cookie, so "today", reminders and the morning summary follow where you are.
-- Not in this release: file attachments on tasks (the attachment tables belong to spaces; see the roadmap).
 
 ## [0.9.4] - 2026-10-12
 

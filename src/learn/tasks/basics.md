@@ -21,11 +21,11 @@ Type in the box at the top and press <kbd>Enter</kbd>. That is all it takes. Cli
 
 ## Your own lists
 
-Make lists such as **Launch** or **Admin** from **New list** in the sidebar. Each list has a colour, and you can reorder lists and group them into folders from **List settings**.
+Make lists such as **Launch** or **Admin** from **New list** in the sidebar. Each list has a colour, and you can reorder lists and group them into folders from **List settings**. Inside a list, drag tasks to put them in order (or use **Move up** and **Move down** in the pane).
 
 ## The detail pane
 
-Click a task to open its pane on the right. Add **steps** (a small checklist), a **due date**, a **reminder**, a **repeat**, a **length**, notes, and a link to an issue or a page. Press <kbd>Esc</kbd> to close it.
+Click a task to open its pane on the right. Add **steps** (a small checklist), a **due date**, a **reminder**, a **repeat**, a **length**, notes, files, and a link to an issue or a page. Press <kbd>Esc</kbd> to close it.
 
 > [!TIP]
 > On any issue or page, **Add to my tasks** turns it into a task that points back to it.

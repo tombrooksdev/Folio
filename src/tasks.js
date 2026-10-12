@@ -61,7 +61,7 @@ const COLS = `t.*, l.name list_name, l.hue list_hue, l.owner_id list_owner,
 const FROM = 'FROM tasks t JOIN task_lists l ON l.id = t.list_id LEFT JOIN users a ON a.id = t.assignee_id LEFT JOIN users c ON c.id = t.created_by LEFT JOIN users ci ON ci.id = t.completed_by';
 
 export function mountTasks(app, ctx) {
-  const { db, page, notifier } = ctx;
+  const { db, page, notifier, files } = ctx;
   const writer = (u) => u.role !== 'viewer';
   const users = () => db.prepare('SELECT id, username FROM users ORDER BY username COLLATE NOCASE').all();
 
@@ -177,7 +177,8 @@ export function mountTasks(app, ctx) {
     if (c.view === 'assigned' && t.creator_name) parts.push(`<span class="t-m">from @${esc(t.creator_name)}</span>`);
     if (t.issue_key) parts.push(`<span class="t-m">${esc(t.issue_key)}</span>`);
     if (done && t.completer_name) parts.push(`<span class="t-m">done by @${esc(t.completer_name)}</span>`);
-    return `<li class="task-row${done ? ' done' : ''}${c.open === t.id ? ' open' : ''}" data-id="${t.id}">
+    const drag = c.view === 'list' && !done && c.canWrite && t.can_edit;
+    return `<li class="task-row${done ? ' done' : ''}${c.open === t.id ? ' open' : ''}" data-id="${t.id}"${drag ? ' draggable="true"' : ''}>
       <form class="t-check" method="post" action="/tasks/${t.id}/complete"><input type="hidden" name="return" value="${esc(c.here)}"><input type="hidden" name="done" value="${done ? 0 : 1}">
         <input type="checkbox" class="task-check" aria-label="${done ? 'Reopen' : 'Complete'}: ${title}" data-tauto${done ? ' checked' : ''}${toggle ? '' : ' disabled'}>${toggle ? '<noscript><button class="sm">Save</button></noscript>' : ''}</form>
       <a class="t-main" href="${esc(withParam(c.base, 't', t.id))}"><span class="t-title">${title}</span>${parts.length ? `<span class="t-meta">${parts.join('')}</span>` : ''}</a>
@@ -232,6 +233,7 @@ export function mountTasks(app, ctx) {
       <div class="t-toggles">
         <form method="post" action="/tasks/${t.id}/my-day">${hid}<input type="hidden" name="on" value="${t.in_day ? 0 : 1}"><button class="ghost" aria-pressed="${!!t.in_day}"${c.canWrite ? '' : ' disabled'}>${icon('sun')}${t.in_day ? 'In My Day' : 'Add to My Day'}</button></form>
         <form method="post" action="/tasks/${t.id}">${hid}<input type="hidden" name="important" value="${t.important ? 0 : 1}"><button class="ghost" aria-pressed="${!!t.important}"${ro}>${icon('star')}Important</button></form>
+        ${edit && !t.completed_at ? `<form method="post" action="/tasks/${t.id}/move">${hid}<button name="dir" value="up" class="ghost">${icon('up')}Move up</button><button name="dir" value="down" class="ghost">${icon('down')}Move down</button></form>` : ''}
       </div>
       <form class="t-details" method="post" action="/tasks/${t.id}">${hid}
         <label>Due <span class="t-inline"><input id="pane-due" type="date" name="due_on" aria-label="Due date" value="${esc(t.due_on ?? '')}" data-tauto${ro}>
@@ -249,6 +251,7 @@ export function mountTasks(app, ctx) {
         <div class="actions"><button${mineTask ? '' : ' disabled'}>Save</button></div>
       </form>
       ${t.notes ? `<div class="doc t-notes">${renderMarkdown(t.notes)}</div>` : ''}
+      ${files.taskPanel(t, here, { upload: mineTask, canDelete: (a) => edit || a.uploaded_by === c.user.id })}
       <p class="muted t-info">Created${t.creator_name ? ` by @${esc(t.creator_name)}` : ''} ${esc(t.created_at.slice(0, 10))}${t.completed_at ? ` · Completed${t.completer_name ? ` by @${esc(t.completer_name)}` : ''} ${esc(t.completed_at.slice(0, 16))} UTC` : ''}</p>
       ${edit ? `<form method="post" action="/tasks/${t.id}/delete" data-confirm="Delete this task?"><input type="hidden" name="return" value="${esc(c.base)}"><button class="danger">${icon('trash')}Delete task</button></form>` : ''}
     </aside>`;
@@ -342,7 +345,7 @@ export function mountTasks(app, ctx) {
       subtitle: `${{ private: 'Private to you', shared: 'Shared with named people', team: 'Team list: everyone can see it' }[list.visibility]}${list.owner_id !== user.id ? ` · by @${owner}` : ''}`,
       total: m ? `<span class="t-total">${fmtDur(m)} planned</span>` : '',
       body: (c) => `${access !== 'view' && c.canWrite ? quickAdd(c, { view: 'list', listId: list.id, placeholder: `Add a task to ${list.name}` }) : ''}
-        ${open.length ? `<ul class="t-list">${open.map((t) => rowHtml(t, { ...c, view: 'list' })).join('')}</ul>` : `<div class="empty">${icon('list')}<h3>This list is empty</h3><p>${access === 'view' ? 'Nothing here yet.' : 'Add a task above.'}</p></div>`}
+        ${open.length ? `<ul class="t-list"${access !== 'view' && c.canWrite ? ' data-reorder' : ''}>${open.map((t) => rowHtml(t, { ...c, view: 'list' })).join('')}</ul>` : `<div class="empty">${icon('list')}<h3>This list is empty</h3><p>${access === 'view' ? 'Nothing here yet.' : 'Add a task above.'}</p></div>`}
         ${completedHtml(done, { ...c, view: 'list' })}
         ${access === 'owner' && c.canWrite ? listSettings(list, c) : ''}`,
     });
@@ -581,6 +584,7 @@ export function mountTasks(app, ctx) {
     const t = getTask(req.params.id, req.user);
     if (!t) return res.status(404).send('No such task');
     if (!t.can_edit) return res.status(403).send('You can only view this task');
+    files.purge({ task_id: t.id });
     db.prepare('DELETE FROM tasks WHERE id = ?').run(t.id);
     back(req, res, '/tasks/all');
   });
@@ -644,6 +648,28 @@ export function mountTasks(app, ctx) {
     back(req, res, `/tasks/all?t=${t.id}`);
   });
 
+  // Reorder inside a list: dir=up|down moves one place; before=<task id> (or empty for the end) is what dragging sends.
+  app.post('/tasks/:id(\\d+)/move', (req, res) => {
+    const t = getTask(req.params.id, req.user);
+    if (!t) return res.status(404).send('No such task');
+    if (!t.can_edit) return res.status(403).send('You can only view this task');
+    const ids = db.prepare('SELECT id FROM tasks WHERE list_id = ? AND completed_at IS NULL ORDER BY position, id').all(t.list_id).map((r) => r.id);
+    const i = ids.indexOf(t.id);
+    if (i < 0) return back(req, res, `/tasks/all?t=${t.id}`);
+    ids.splice(i, 1);
+    const b = req.body;
+    if (b.dir === 'up') ids.splice(Math.max(0, i - 1), 0, t.id);
+    else if (b.dir === 'down') ids.splice(Math.min(ids.length, i + 1), 0, t.id);
+    else if ('before' in b) {
+      const at = b.before === '' ? -1 : ids.indexOf(Number(b.before));
+      if (b.before !== '' && at < 0) return res.status(400).send('That task is not in this list');
+      ids.splice(at < 0 ? ids.length : at, 0, t.id);
+    } else return res.status(400).send('Say where to move it');
+    const set = db.prepare('UPDATE tasks SET position = ? WHERE id = ?');
+    tx(db, () => ids.forEach((id, k) => set.run(k + 1, id)));
+    back(req, res, `/tasks/all?t=${t.id}`);
+  });
+
   app.post('/tasks/:id(\\d+)/my-day', (req, res) => {
     const today = localDay(offsetOf(req));
     const t = getTask(req.params.id, req.user, today);
@@ -692,7 +718,7 @@ export function mountTasks(app, ctx) {
     const list = ownedList(req, res);
     if (!list) return;
     const b = req.body;
-    if (b.action === 'delete') { db.prepare('DELETE FROM task_lists WHERE id = ?').run(list.id); return res.redirect(303, '/tasks/my-day'); }
+    if (b.action === 'delete') { for (const r of db.prepare('SELECT id FROM tasks WHERE list_id = ?').all(list.id)) files.purge({ task_id: r.id }); db.prepare('DELETE FROM task_lists WHERE id = ?').run(list.id); return res.redirect(303, '/tasks/my-day'); }
     if (b.move === 'up' || b.move === 'down') {
       const mine = db.prepare('SELECT id FROM task_lists WHERE owner_id = ? ORDER BY position, id').all(list.owner_id).map((r) => r.id);
       const i = mine.indexOf(list.id), j = b.move === 'up' ? i - 1 : i + 1;
@@ -728,6 +754,13 @@ export function mountTasks(app, ctx) {
     setFlag(db, req.user.id, 'task-capacity', String(Math.round(h * 60)));
     res.redirect('/account?ok=capacity');
   });
+
+  // What the file routes need to know about a task: may this person see its files, add to them, or manage them?
+  ctx.taskFiles = (user, taskId) => {
+    const t = getTask(taskId, user);
+    if (!t) return null;
+    return { edit: !!t.can_edit && writer(user), upload: writer(user) && (!!t.can_edit || t.assignee_id === user.id) };
+  };
 
   // ---- reminders and the daily digest ----
   const visibleTo = (userId, taskId) => !!db.prepare(`SELECT 1 ${FROM} WHERE t.id = ? AND ${VIS}`).get(taskId, userId, userId, userId);

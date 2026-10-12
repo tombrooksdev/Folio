@@ -6,13 +6,7 @@ What is planned next for Folio, roughly in order. Sizes: **S** a day or two, **M
 
 A Microsoft To Do style task list, built in. Every task can have a **date**, a **length** and a **person**. All three phases of the [specification](docs/specs/tasks.md) shipped together: the list, sharing and assigning, and the week planner.
 
-Still to do for Tasks:
-
-| Item | Size | Notes |
-|---|---|---|
-| Attachments on tasks | S | The attachment tables are keyed to a space; they need to allow a task as an owner |
-| Reorder tasks by dragging | S | Tasks keep the order they were added in |
-| Browser-level tests for the page script | S | The server and the parser are tested; the page script is checked by hand |
+Attachments on tasks, reordering by dragging and browser tests followed in 0.10.1.
 
 ## Soon
 
@@ -47,4 +41,4 @@ Still to do for Tasks:
 
 ## Recently shipped
 
-See the [changelog](CHANGELOG.md). Highlights: Tasks (0.10.0), security hardening and roles (0.9.0), the Learn area, tour and notifications (0.8.0), Windows and Linux installers (0.7.0), sub-tasks, issue links and swimlanes (0.6.0), epics, attachments and GitHub (0.5.0).
+See the [changelog](CHANGELOG.md). Highlights: Tasks (0.10.0 and 0.10.1), security hardening and roles (0.9.0), the Learn area, tour and notifications (0.8.0), Windows and Linux installers (0.7.0), sub-tasks, issue links and swimlanes (0.6.0), epics, attachments and GitHub (0.5.0).

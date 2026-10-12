@@ -88,7 +88,7 @@ document.addEventListener('submit', async (e) => {
   if (e.defaultPrevented || !(form instanceof HTMLFormElement) || form.method !== 'post' || !inTasks(form)) return;
   // getAttribute, not form.action: a field named "action" (the delete-list form has one) shadows the property
   const action = form.getAttribute('action') ?? '';
-  if (!/^\/tasks(?:\/|$)/.test(action)) return;
+  if (!/^\/(?:tasks(?:\/|$)|attachments\/\d+\/delete$)/.test(action)) return;
   e.preventDefault();
   if (form.dataset.confirm && !form.dataset.bound && !confirm(form.dataset.confirm)) return;
   const quick = form.id === 'quick-form';
@@ -163,6 +163,55 @@ addEventListener('keydown', async (e) => {
   else if (e.key === 'm' && s) { if (await ensurePane(s)) $('#t-pane form[action$="/my-day"] button:not(:disabled)')?.click(); }
   else if (e.key === 'd' && s) { if (await ensurePane(s)) { e.preventDefault?.(); $('#pane-due')?.focus(); } }
 });
+
+// ---- files on a task: pick or drop, then refresh the pane ----
+async function attach(taskId, list) {
+  for (const f of list) {
+    const r = await fetch(`/attachments?task=${taskId}&name=${encodeURIComponent(f.name)}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Requested-With': 'fetch' }, body: f });
+    if (!r.ok) { toast((await r.json().catch(() => ({}))).error || 'Upload failed'); break; }
+  }
+  get(location.href);
+}
+document.addEventListener('change', (e) => {
+  const zone = e.target.closest?.('[data-task-upload]');
+  if (zone && e.target.type === 'file') { attach(zone.dataset.taskUpload, [...e.target.files]); e.target.value = ''; }
+});
+document.addEventListener('dragover', (e) => { const z = e.target.closest?.('[data-task-upload]'); if (z && e.dataTransfer?.types.includes('Files')) { e.preventDefault(); z.classList.add('over'); } });
+document.addEventListener('dragleave', (e) => e.target.closest?.('[data-task-upload]')?.classList.remove('over'));
+document.addEventListener('drop', (e) => {
+  const z = e.target.closest?.('[data-task-upload]');
+  if (z && e.dataTransfer?.files.length) { e.preventDefault(); z.classList.remove('over'); attach(z.dataset.taskUpload, [...e.dataTransfer.files]); }
+});
+
+// ---- reorder tasks in a list by dragging (the pane also has Move up and Move down) ----
+let dragRow = null;
+document.addEventListener('dragstart', (e) => {
+  const row = e.target.closest?.('ul[data-reorder] > .task-row[draggable]');
+  if (!row) return;
+  dragRow = row;
+  e.dataTransfer.setData('text/x-folio-row', row.dataset.id);
+  e.dataTransfer.effectAllowed = 'move';
+});
+const dropTarget = (e) => {
+  const row = e.target.closest?.('ul[data-reorder] > .task-row');
+  if (!dragRow || !row || row === dragRow) return null;
+  const r = row.getBoundingClientRect();
+  return e.clientY < r.top + r.height / 2 ? row : row.nextElementSibling; // null means the end
+};
+document.addEventListener('dragover', (e) => {
+  if (dragRow && e.target.closest?.('ul[data-reorder]')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+});
+document.addEventListener('drop', (e) => {
+  if (!dragRow || !e.target.closest?.('ul[data-reorder]')) return;
+  e.preventDefault();
+  const row = e.target.closest('.task-row');
+  const before = row && row !== dragRow ? dropTarget(e) : undefined;
+  const id = dragRow.dataset.id;
+  dragRow = null;
+  if (before === undefined) return;
+  post(`/tasks/${id}/move`, { before: before?.dataset.id ?? '', return: location.pathname + location.search });
+});
+document.addEventListener('dragend', () => { dragRow = null; });
 
 // ---- week planner: place blocks, drag to time-box ----
 function layoutWeek() {

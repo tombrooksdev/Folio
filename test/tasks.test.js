@@ -116,8 +116,8 @@ async function boot() {
   const base = `http://localhost:${server.address().port}`;
   const client = () => {
     let cookie = '';
-    return async (path, { method = 'GET', form, headers = {} } = {}) => {
-      const r = await fetch(base + path, { method, redirect: 'manual', headers: { ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...headers, cookie: [cookie, headers.cookie].filter(Boolean).join('; ') }, body: form && new URLSearchParams(form) });
+    return async (path, { method = 'GET', form, raw, headers = {} } = {}) => {
+      const r = await fetch(base + path, { method, redirect: 'manual', headers: { ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...(raw && { 'content-type': 'application/octet-stream' }), ...headers, cookie: [cookie, headers.cookie].filter(Boolean).join('; ') }, body: raw ?? (form && new URLSearchParams(form)) });
       const sid = (r.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).filter((c) => /sid=[0-9a-f]/.test(c)).at(-1);
       if (sid) cookie = sid;
       return { status: r.status, loc: r.headers.get('location'), text: await r.text(), headers: r.headers };
@@ -132,7 +132,7 @@ async function boot() {
     return c;
   };
   const id = (name) => db.prepare('SELECT id FROM users WHERE username = ?').get(name).id;
-  return { admin, join: join_, db, tick: (d) => app.locals.tasksTick(d), id, close: () => server.close() };
+  return { admin, join: join_, uploadDir, db, tick: (d) => app.locals.tasksTick(d), id, close: () => server.close() };
 }
 const today = () => new Date().toISOString().slice(0, 10);
 const taskId = (db, title) => db.prepare('SELECT id FROM tasks WHERE title = ?').get(title)?.id;
@@ -662,4 +662,122 @@ test('old databases upgrade in place', async () => {
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = ?").get(t), t);
   assert.equal(db.prepare('SELECT username FROM users').get().username, 'old');
   openDb(file); // opening twice is harmless
+});
+
+test('reorder tasks in a list: up, down, drag to a place, and only where allowed', async () => {
+  const { admin, join, db, id, close } = await boot();
+  const sam = await join('sam');
+  await admin('/tasks/my-day');
+  const lid = db.prepare('SELECT id FROM task_lists').get().id;
+  for (const t of ['A', 'B', 'C', 'D']) await add(admin, t, { list_id: String(lid) });
+  const order = () => db.prepare('SELECT title FROM tasks WHERE list_id = ? AND completed_at IS NULL ORDER BY position, id').all(lid).map((r) => r.title).join('');
+  const tid = (t) => taskId(db, t);
+  assert.equal(order(), 'ABCD');
+  await admin(`/tasks/${tid('C')}/move`, { method: 'POST', form: { dir: 'up' } });
+  assert.equal(order(), 'ACBD');
+  await admin(`/tasks/${tid('A')}/move`, { method: 'POST', form: { dir: 'down' } });
+  assert.equal(order(), 'CABD');
+  await admin(`/tasks/${tid('C')}/move`, { method: 'POST', form: { dir: 'up' } }); // already first: stays
+  assert.equal(order(), 'CABD');
+  await admin(`/tasks/${tid('D')}/move`, { method: 'POST', form: { before: String(tid('C')) } });
+  assert.equal(order(), 'DCAB');
+  await admin(`/tasks/${tid('D')}/move`, { method: 'POST', form: { before: '' } }); // to the end
+  assert.equal(order(), 'CABD');
+  assert.equal((await admin(`/tasks/${tid('A')}/move`, { method: 'POST', form: { before: '99999' } })).status, 400);
+  assert.equal((await admin(`/tasks/${tid('A')}/move`, { method: 'POST', form: {} })).status, 400);
+  assert.equal(order(), 'CABD');
+  // the list page marks itself reorderable for editors, with draggable rows
+  const page = (await admin(`/tasks/lists/${lid}`)).text;
+  assert.match(page, /data-reorder/);
+  assert.match(page, /draggable="true"/);
+  assert.match((await admin(`/tasks/all?t=${tid('A')}`)).text, /Move up/);
+  // someone else's private list, or a view-only member, cannot reorder
+  assert.equal((await sam(`/tasks/${tid('A')}/move`, { method: 'POST', form: { dir: 'up' } })).status, 404);
+  await admin(`/tasks/lists/${lid}/share`, { method: 'POST', form: { op: 'add', user_id: String(id('sam')), can_edit: '0' } });
+  assert.equal((await sam(`/tasks/${tid('A')}/move`, { method: 'POST', form: { dir: 'up' } })).status, 403);
+  assert.doesNotMatch((await sam(`/tasks/lists/${lid}`)).text, /data-reorder/);
+  assert.equal(order(), 'CABD');
+  close();
+});
+
+test('files on a task: upload, list, download, privacy, delete rules, cleanup', async () => {
+  const { admin, join, db, id, uploadDir, close } = await boot();
+  const { existsSync } = await import('node:fs');
+  const sam = await join('sam'), vic = await join('vic', 'viewer');
+  await add(admin, 'Needs a file');
+  const tid = taskId(db, 'Needs a file');
+  const up = (who, task, name = 'plan.txt', body = 'hello') => who(`/attachments?task=${task}&name=${name}`, { method: 'POST', raw: body });
+  const r = await up(admin, tid);
+  assert.equal(r.status, 200);
+  const a = JSON.parse(r.text);
+  assert.equal(db.prepare('SELECT space_id, task_id FROM attachments WHERE id = ?').get(a.id).task_id, tid);
+  assert.equal(db.prepare('SELECT space_id FROM attachments WHERE id = ?').get(a.id).space_id, null);
+  assert.match((await admin(`/tasks/all?t=${tid}`)).text, /plan\.txt/);
+  assert.equal((await admin(a.url)).text, 'hello');
+  // private list: nobody else can fetch, list, add or delete it (404, as with the task itself)
+  assert.equal((await sam(a.url)).status, 404);
+  assert.equal((await up(sam, tid)).status, 404);
+  assert.equal((await sam(`/attachments/${a.id}/delete`, { method: 'POST', form: {} })).status, 404);
+  // an assignee can see and add files, but only delete their own
+  await admin(`/tasks/${tid}`, { method: 'POST', form: { assignee: String(id('sam')) } });
+  assert.equal((await sam(a.url)).text, 'hello');
+  const b = JSON.parse((await up(sam, tid, 'mine.txt', 'sam file')).text);
+  assert.equal((await sam(`/attachments/${a.id}/delete`, { method: 'POST', form: {} })).status, 403);
+  assert.equal((await sam(`/attachments/${b.id}/delete`, { method: 'POST', form: { back: `/tasks/all?t=${tid}` } })).loc, `/tasks/all?t=${tid}`);
+  assert.equal(existsSync(`${uploadDir}/${db.prepare('SELECT stored FROM attachments WHERE id = ?').get(a.id).stored}`), true);
+  // viewers cannot add; a team list shows files to a viewer but never lets them delete
+  assert.equal((await up(vic, tid)).status, 403);
+  // the limit, bad targets and a hostile redirect
+  for (let i = 0; i < 19; i++) await up(admin, tid, `f${i}.txt`);
+  assert.equal((await up(admin, tid, 'one-too-many.txt')).status, 400);
+  assert.equal((await up(admin, 99999)).status, 404);
+  assert.match((await admin(`/attachments/${a.id}/delete`, { method: 'POST', form: { back: 'https://evil.example/' } })).loc, /^\/$/);
+  // deleting the task removes its files from disk
+  const stored = db.prepare('SELECT stored FROM attachments WHERE task_id = ?').all(tid).map((x) => x.stored);
+  assert.ok(stored.length > 5);
+  await admin(`/tasks/${tid}/delete`, { method: 'POST' });
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM attachments WHERE task_id IS NOT NULL').get().n, 0);
+  assert.ok(stored.every((s) => !existsSync(`${uploadDir}/${s}`)));
+  // deleting a whole list does the same
+  const made = await admin('/tasks/lists', { method: 'POST', form: { name: 'Temp' } });
+  const lid = Number(made.loc.split('/').pop());
+  await add(admin, 'In temp', { list_id: String(lid) });
+  const t2 = taskId(db, 'In temp');
+  await up(admin, t2);
+  const s2 = db.prepare('SELECT stored FROM attachments WHERE task_id = ?').get(t2).stored;
+  await admin(`/tasks/lists/${lid}`, { method: 'POST', form: { action: 'delete' } });
+  assert.equal(existsSync(`${uploadDir}/${s2}`), false);
+  close();
+});
+
+test('page and issue attachments still work after the table change', async () => {
+  const { admin, db, close } = await boot();
+  await admin('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const pid = (await admin('/s/ENG/pages', { method: 'POST', form: { title: 'P', body: 'x' } })).loc.split('/')[2];
+  const r = await admin(`/attachments?space=ENG&page=${pid}&name=a.txt`, { method: 'POST', raw: 'abc' });
+  assert.equal(r.status, 200);
+  assert.equal(db.prepare('SELECT space_id FROM attachments').get().space_id, 1);
+  assert.match((await admin(`/p/${pid}`)).text, /a\.txt/);
+  assert.equal((await admin('/attachments?name=a.txt', { method: 'POST', raw: 'abc' })).status, 404); // still needs a space or a task
+  close();
+});
+
+test('an old attachments table (space required) is rebuilt and keeps its rows', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const file = join(mkdtempSync(join(tmpdir(), 'folio-db-')), 'old.db');
+  const old = new DatabaseSync(file);
+  old.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE spaces (id INTEGER PRIMARY KEY, key TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    INSERT INTO users (username, password_hash) VALUES ('old', 'x'); INSERT INTO spaces (key, name) VALUES ('ENG', 'Eng');
+    CREATE TABLE attachments (id INTEGER PRIMARY KEY, space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE, page_id INTEGER, issue_id INTEGER,
+      filename TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, stored TEXT NOT NULL, uploaded_by INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    INSERT INTO attachments (space_id, filename, mime, size, stored) VALUES (1, 'keep.png', 'image/png', 3, 'abc');`);
+  old.close();
+  const db = openDb(file);
+  assert.equal(db.prepare('SELECT filename, space_id FROM attachments').get().filename, 'keep.png');
+  assert.equal(db.prepare('PRAGMA table_info(attachments)').all().find((c) => c.name === 'space_id').notnull, 0);
+  assert.ok(db.prepare('PRAGMA table_info(attachments)').all().some((c) => c.name === 'task_id'));
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'attachments_task'").get());
+  openDb(file); // a second open changes nothing
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM attachments').get().n, 1);
 });

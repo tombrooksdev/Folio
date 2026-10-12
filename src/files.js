@@ -58,6 +58,7 @@ export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576, maxStorage
     },
     // Delete files (and rows) belonging to an owner. A page owner includes its child pages.
     purge(owner) {
+      if ('task_id' in owner) return remove(db.prepare('SELECT * FROM attachments WHERE task_id = ?').all(owner.task_id));
       if ('issue_id' in owner) return remove(db.prepare('SELECT * FROM attachments WHERE issue_id = ?').all(owner.issue_id));
       const ids = db.prepare('WITH RECURSIVE t(id) AS (SELECT ? UNION ALL SELECT p.id FROM pages p JOIN t ON p.parent_id = t.id) SELECT id FROM t').all(owner.page_id).map((r) => r.id);
       for (const id of ids) remove(db.prepare('SELECT * FROM attachments WHERE page_id = ?').all(id));
@@ -74,17 +75,34 @@ export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576, maxStorage
         <label class="dropzone" data-upload data-space="${esc(space.key)}" data-${col.replace('_', '-')}="${owner[col]}"><input type="file" multiple hidden>${icon('download')}<span>Drop files here or <u>browse</u></span></label>
       </section><script src="/files.js"></script>`;
     },
-    // Delete attachments that were never attached to a page or issue (abandoned drafts) after a day.
-    purgeOrphans() {
-      remove(db.prepare("SELECT * FROM attachments WHERE page_id IS NULL AND issue_id IS NULL AND created_at < datetime('now', '-1 day')").all());
+    // Files on a task: a compact list for the Tasks detail pane. Uploading is done by the Tasks page script.
+    taskPanel(task, back, { upload, canDelete }) {
+      const rows = db.prepare('SELECT a.*, u.username FROM attachments a LEFT JOIN users u ON u.id = a.uploaded_by WHERE a.task_id = ? ORDER BY a.id').all(task.id);
+      return `<section class="attachments t-files"><h3>Attachments <span class="count">${rows.length}</span></h3>
+        ${rows.length ? `<ul class="file-list">${rows.map((a) => `<li>${isImage(a.mime) ? `<a class="thumb" href="${urlFor(a)}" target="_blank" rel="noopener"><img src="${urlFor(a)}" alt="" loading="lazy"></a>` : `<span class="file-ico">${icon('file')}</span>`}
+          <div><a href="${urlFor(a)}"${isImage(a.mime) || a.mime === 'application/pdf' ? ' target="_blank" rel="noopener"' : ''}>${esc(a.filename)}</a><span class="muted">${size(a.size)} · ${esc(a.username ?? 'unknown')}</span></div>
+          ${canDelete(a) ? `<form method="post" action="/attachments/${a.id}/delete" data-confirm="Delete ${esc(a.filename)}?"><input type="hidden" name="back" value="${esc(back)}"><button class="danger sm" aria-label="Delete ${esc(a.filename)}">${icon('trash')}</button></form>` : ''}</li>`).join('')}</ul>` : ''}
+        ${upload ? `<label class="dropzone" data-task-upload="${task.id}"><input type="file" multiple hidden aria-label="Attach files to this task">${icon('download')}<span>Drop files here or <u>browse</u></span></label>` : ''}
+      </section>`;
     },
-    mount(app, { getSpace }) {
+    // Delete attachments that were never attached to anything (abandoned drafts) after a day.
+    purgeOrphans() {
+      remove(db.prepare("SELECT * FROM attachments WHERE page_id IS NULL AND issue_id IS NULL AND task_id IS NULL AND created_at < datetime('now', '-1 day')").all());
+    },
+    mount(app, ctx) {
+      const { getSpace } = ctx;
       files.purgeOrphans();
       setInterval(() => files.purgeOrphans(), 864e5).unref();
 
       app.post('/attachments', wrap(async (req, res) => {
-        const space = getSpace(String(req.query.space ?? ''));
-        if (!space) return res.status(404).json({ error: 'No such space' });
+        // A file on a task has no space; the Tasks module says who may add to it (and hides it from everyone else).
+        const taskId = req.query.task ? Number(req.query.task) : null;
+        const taskRule = taskId ? ctx.taskFiles?.(req.user, taskId) : null;
+        if (taskId && !taskRule) return res.status(404).json({ error: 'No such task' });
+        if (taskId && !taskRule.upload) return res.status(403).json({ error: 'You cannot add files to this task' });
+        if (taskId && db.prepare('SELECT COUNT(*) n FROM attachments WHERE task_id = ?').get(taskId).n >= 20) return res.status(400).json({ error: 'A task can have up to 20 files' });
+        const space = taskId ? null : getSpace(String(req.query.space ?? ''));
+        if (!taskId && !space) return res.status(404).json({ error: 'No such space' });
         let pageId = null, issueId = null;
         if (req.query.page) { const p = db.prepare('SELECT id FROM pages WHERE id = ? AND space_id = ?').get(Number(req.query.page), space.id); if (!p) return res.status(404).json({ error: 'No such page' }); pageId = p.id; }
         if (req.query.issue) { const i = db.prepare('SELECT id FROM issues WHERE id = ? AND space_id = ?').get(Number(req.query.issue), space.id); if (!i) return res.status(404).json({ error: 'No such issue' }); issueId = i.id; }
@@ -115,8 +133,8 @@ export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576, maxStorage
         if (over) { rmSync(path, { force: true }); return size > maxBytes ? tooBig() : full(); }
         if (!size) { rmSync(path, { force: true }); return res.status(400).json({ error: 'Empty file' }); }
         if (SNIFF[ext] && !SNIFF[ext](head(path))) { rmSync(path, { force: true }); return res.status(415).json({ error: `The contents of ${filename} do not match its type` }); }
-        const id = Number(db.prepare('INSERT INTO attachments (space_id, page_id, issue_id, filename, mime, size, stored, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(space.id, pageId, issueId, filename, mime, size, stored, req.user.id).lastInsertRowid);
+        const id = Number(db.prepare('INSERT INTO attachments (space_id, page_id, issue_id, task_id, filename, mime, size, stored, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(space?.id ?? null, pageId, issueId, taskId, filename, mime, size, stored, req.user.id).lastInsertRowid);
         const url = urlFor({ id, filename });
         res.json({ id, url, filename, image: isImage(mime), markdown: isImage(mime) ? `![${filename}](${url})` : `[${filename}](${url})` });
       }));
@@ -124,6 +142,7 @@ export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576, maxStorage
         const a = db.prepare('SELECT * FROM attachments WHERE id = ?').get(Number(req.params.id));
         const abs = a && join(root, a.stored);
         if (!a || !existsSync(abs)) return res.status(404).send('No such file');
+        if (a.task_id && !ctx.taskFiles?.(req.user, a.task_id)) return res.status(404).send('No such file'); // a private task's files stay private
         res.set({
           'Content-Type': a.mime,
           'Content-Disposition': `${INLINE.has(a.mime) ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(a.filename)}`,
@@ -136,10 +155,14 @@ export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576, maxStorage
       app.post('/attachments/:id/delete', (req, res) => {
         const a = db.prepare('SELECT * FROM attachments WHERE id = ?').get(Number(req.params.id));
         if (!a) return res.status(404).send('No such file');
-        if (a.uploaded_by !== req.user.id && req.user.role !== 'admin') return res.status(403).send('Only the person who uploaded a file, or an administrator, can delete it');
+        if (a.task_id) {
+          const rule = ctx.taskFiles?.(req.user, a.task_id);
+          if (!rule) return res.status(404).send('No such file');
+          if (a.uploaded_by !== req.user.id && !rule.edit) return res.status(403).send('Only the person who uploaded a file, or someone who can edit the task, can delete it');
+        } else if (a.uploaded_by !== req.user.id && req.user.role !== 'admin') return res.status(403).send('Only the person who uploaded a file, or an administrator, can delete it');
         remove([a]);
         const back = String(req.body.back ?? '');
-        res.redirect(/^\/(p|i)\/\d+$/.test(back) ? back : '/');
+        res.redirect(/^\/(p|i)\/\d+$/.test(back) || /^\/tasks(?:[/?][^\r\n\\]*)?$/.test(back) ? back : '/');
       });
     },
   };

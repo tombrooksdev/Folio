@@ -278,8 +278,9 @@ All three phases shipped together. Where the build differs from the text above:
 
 - **Open questions** went the way of each recommendation: the browser's time zone (a `tz` cookie), one assignee, capacity per person (Account page), no coupling between completed issues and linked tasks, and the name "Tasks".
 - **`tasks.remind_at`** is not in the table; reminders live only in `task_reminders`, as the spec said they would.
-- **Attachments** are not built. The attachment tables are keyed to a space, so tasks need a small migration first. Listed in the roadmap.
+- **Attachments** use the same table as pages and issues. It no longer requires a space, so existing databases are rebuilt once on start-up. A task's files are only served to people who can see the task, and are limited to 20 per task.
+- **Reordering** tasks inside a list (drag, or Move up and Move down) was added in 0.10.1.
 - **Updates return a redirect, not JSON.** Every write redirects back to the page it came from, and the page script swaps the new HTML in. The pages work with JavaScript off.
 - **Planned and Important show your own tasks** (assigned to you, or yours and unassigned). **All tasks** shows everything you can see.
 - **The week planner** shows time-boxed tasks in a 06:00 to 22:00 grid. Dropping a task also sets its due date to that day.
-- **Tests**: the parser, dates and repeat rules are unit tested, and every route is tested as owner, member and viewer. There is no jsdom suite; the page script was exercised in a real browser by hand.
+- **Tests**: the parser, dates and repeat rules are unit tested, and every route is tested as owner, member and viewer. There is no jsdom suite. Instead `test/browser.test.js` drives the page script in a real Chromium through Playwright, and skips itself where that is not installed (`PLAYWRIGHT_FROM` can point at any `package.json` whose `node_modules` has it).
