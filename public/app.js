@@ -233,7 +233,7 @@ addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || t.closest?.('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
   const space = document.body.dataset.space;
   if (chord) {
-    const go = { h: '/', b: space && `/s/${space}/board`, l: space && `/s/${space}/backlog`, i: space && `/s/${space}/issues`, r: space && `/s/${space}/reports` }[e.key];
+    const go = { h: '/', b: space && `/s/${space}/board`, l: space && `/s/${space}/backlog`, i: space && `/s/${space}/issues`, r: space && `/s/${space}/reports`, t: '/tasks' }[e.key];
     chord = null;
     if (go) { e.preventDefault(); location.href = go; }
     return;

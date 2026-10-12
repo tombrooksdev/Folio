@@ -63,6 +63,15 @@ Folio follows the conventions people already know from tools like Confluence and
 - Jira-style layout: filters, status lozenges, issue-type icons, a two-column issue view with inline editing
 - Issue keys like `ENG-12`
 
+**Tasks**
+- A quiet to-do list in the style of Microsoft To Do: **My Day** (with suggestions), **Important**, **Planned**, **Assigned to me**, **All tasks** and **Completed**
+- Every task can have a **date**, a **length** and a **person**, plus steps, notes, a repeat rule, a reminder and a link to an issue or page
+- **Quick add** understands one line: `Write the launch post fri ~1h30 @sam ! #Launch`
+- Day totals ("3h 15m planned") that turn amber when a day is over your capacity
+- Private, shared and team **lists**; assigning a task notifies the person and tells you when it is done
+- A **week planner** where you drag a task onto a day to time-box it, and a calendar (`.ics`) export
+- **Add to my tasks** on any issue or page
+
 **GitHub (read-only)**
 - Link a repository to a space and browse its commits, pull requests, branches and README
 - Issue keys in commit messages and PR titles (`ENG-12`) link back to the issue
@@ -70,7 +79,7 @@ Folio follows the conventions people already know from tools like Confluence and
 - Folio never writes to GitHub, and never talks to anything but `api.github.com`
 
 **Learning and onboarding**
-- A built-in **Learn** area: six short courses (23 lessons) with progress tracking
+- A built-in **Learn** area: seven short courses (26 lessons) with progress tracking
 - A one-click **practice space** with sample pages, epics and a running sprint
 - A **first-login tour**, a self-ticking **getting-started checklist** and dismissible hints
 - **Notifications**: a bell, inbox, watching, `@mentions`, per-person settings, desktop alerts and an optional Slack / Teams / Discord webhook
@@ -366,7 +375,7 @@ See [CHANGELOG.md](CHANGELOG.md), also shown in the app at `/changelog` (click t
 
 ## Roadmap
 
-Next up is **Tasks**: a Microsoft To Do style list where every task can have a date, a length and a person. See [ROADMAP.md](ROADMAP.md) and the [Tasks specification](docs/specs/tasks.md).
+See [ROADMAP.md](ROADMAP.md) for what is planned next, and the [Tasks specification](docs/specs/tasks.md) for how Tasks was designed.
 
 Ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 

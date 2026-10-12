@@ -1,6 +1,6 @@
 # Tasks: a To Do list inside Folio
 
-**Status:** proposed. **Target:** v0.10.0. **Size:** large (three phases, each shippable on its own).
+**Status:** built in v0.10.0 (see the notes at the end for what differs). **Target:** v0.10.0. **Size:** large (three phases, each shippable on its own).
 
 A calm personal and team to-do list in the style of Microsoft To Do, living beside the wiki and the Scrum board. Every task can have a **date**, a **length** (how long it will take) and a **person**.
 
@@ -271,3 +271,15 @@ A small server timer (every minute, unref'd) sends due reminders. It stores `sen
 3. **Daily capacity.** One team-wide default, or per person? (Recommendation: per person, in Account.)
 4. **Should a completed issue offer to close its linked task?** (Recommendation: no; keep the two systems separate.)
 5. **Naming.** "Tasks" or "To Do"? (Recommendation: "Tasks", which does not clash with the Done column.)
+
+## As built (v0.10.0)
+
+All three phases shipped together. Where the build differs from the text above:
+
+- **Open questions** went the way of each recommendation: the browser's time zone (a `tz` cookie), one assignee, capacity per person (Account page), no coupling between completed issues and linked tasks, and the name "Tasks".
+- **`tasks.remind_at`** is not in the table; reminders live only in `task_reminders`, as the spec said they would.
+- **Attachments** are not built. The attachment tables are keyed to a space, so tasks need a small migration first. Listed in the roadmap.
+- **Updates return a redirect, not JSON.** Every write redirects back to the page it came from, and the page script swaps the new HTML in. The pages work with JavaScript off.
+- **Planned and Important show your own tasks** (assigned to you, or yours and unassigned). **All tasks** shows everything you can see.
+- **The week planner** shows time-boxed tasks in a 06:00 to 22:00 grid. Dropping a task also sets its due date to that day.
+- **Tests**: the parser, dates and repeat rules are unit tested, and every route is tested as owner, member and viewer. There is no jsdom suite; the page script was exercised in a real browser by hand.

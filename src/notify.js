@@ -11,6 +11,10 @@ export const KINDS = {
   assigned: ['Assigned to you', 'An issue is assigned to you'],
   mention: ['Mentions', 'Someone @mentions you'],
   sprint: ['Sprints', 'A sprint starts or is completed'],
+  task_assigned: ['Tasks assigned to you', 'Someone assigns you a task'],
+  task_reminder: ['Task reminders', 'A reminder you set is due'],
+  task_due: ['Tasks due today', 'A morning summary of what is due and overdue'],
+  task_done: ['Tasks completed', 'Something you assigned is finished'],
 };
 const TEAM_KINDS = new Set(['page_created', 'issue_created', 'sprint']); // also posted to the webhook, if configured
 const COALESCE = new Set(['page_updated', 'issue_updated']);

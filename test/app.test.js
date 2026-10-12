@@ -513,12 +513,12 @@ test('learn: courses, lessons, progress, checklist, tour flag, hints, practice s
   assert.equal((await req('/me/flag', { method: 'POST', form: { key: 'evil:key' } })).status, 400);
 
   const learn = (await req('/learn')).text;
-  assert.match(learn, /Learn Folio/); assert.match(learn, /Getting started/); assert.match(learn, /0 of 23 lessons complete/);
+  assert.match(learn, /Learn Folio/); assert.match(learn, /Getting started/); assert.match(learn, /0 of 26 lessons complete/);
   const lesson = (await req('/learn/getting-started/welcome')).text;
   assert.match(lesson, /Find your way around/); assert.match(lesson, /Lesson 1 of 5/);
   assert.match(lesson, /<span class="mention">|class="panel panel-tip"/); // panels render inside lessons
   assert.equal((await req('/learn/getting-started/welcome/complete', { method: 'POST' })).loc, '/learn/getting-started/spaces');
-  assert.match((await req('/learn')).text, /1 of 23 lessons complete/);
+  assert.match((await req('/learn')).text, /1 of 26 lessons complete/);
   assert.equal((await req('/learn/nope')).status, 404);
   assert.equal((await req('/learn/docs/nope')).status, 404);
 

@@ -121,6 +121,10 @@ const PATHS = {
   bulb: 'M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.9.7 1.5 1.6 1.5 2.6V17h4v-.5c0-1 .6-1.9 1.5-2.6A6 6 0 0012 3z',
   settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
   help: 'M9.1 9a3 3 0 115.8 1c-.6 1.3-2.4 1.7-2.9 3M12 17h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  user: 'M20 21a8 8 0 10-16 0M12 11a4 4 0 100-8 4 4 0 000 8z',
+  repeat: 'M17 2l4 4-4 4M3 11V9a3 3 0 013-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 01-3 3H3',
+  tasks: 'M9 6h11M9 12h11M9 18h11M3.5 6l1.2 1.2L7 4.9M3.5 12l1.2 1.2L7 10.9M3.5 18l1.2 1.2L7 16.9',
   logo: 'M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2zM14 3v6h6M8 13h8M8 17h5',
 };
 export const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${PATHS[name]}"/></svg>`;
@@ -184,7 +188,7 @@ ${user && !bare ? '<script src="/tour.js"></script>' : ''}
 }
 
 function createDialogs({ spaces, people, spaceKey, canWrite = true }) {
-  const keys = [['C', 'Create an issue'], ['/', 'Search'], ['E', 'Edit this page or issue'], ['G then H', 'Go to home'], ['G then B', 'Go to the board'], ['G then L', 'Go to the backlog'], ['G then I', 'Go to issue search'], ['[', 'Show or hide the sidebar'], ['?', 'Show this help']];
+  const keys = [['C', 'Create an issue'], ['/', 'Search'], ['E', 'Edit this page or issue'], ['G then H', 'Go to home'], ['G then B', 'Go to the board'], ['G then L', 'Go to the backlog'], ['G then I', 'Go to issue search'], ['G then T', 'Go to Tasks'], ['N', 'New task (on a Tasks page)'], ['[', 'Show or hide the sidebar'], ['?', 'Show this help']];
   return `${canWrite ? `<dialog class="modal" id="create-issue" aria-labelledby="ci-title">
   <form method="dialog" class="modal-head"><h2 id="ci-title">Create issue</h2><button class="icon-btn" aria-label="Close">${icon('plus')}</button></form>
   <form id="create-issue-form" class="modal-body">

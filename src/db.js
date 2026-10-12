@@ -205,6 +205,67 @@ export function openDb(file) {
       read_at TEXT
     );
     CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, read_at, id DESC);
+    -- Tasks: a personal and team to-do list (lists, tasks, steps, a per-day "My Day" and per-person reminders).
+    CREATE TABLE IF NOT EXISTS task_lists (
+      id INTEGER PRIMARY KEY,
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      hue INTEGER NOT NULL DEFAULT 0,
+      visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private','shared','team')),
+      position REAL NOT NULL DEFAULT 0,
+      group_name TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS task_lists_owner ON task_lists(owner_id, position);
+    CREATE TABLE IF NOT EXISTS task_list_members (
+      list_id INTEGER NOT NULL REFERENCES task_lists(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      can_edit INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (list_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS tasks (
+      id INTEGER PRIMARY KEY,
+      list_id INTEGER NOT NULL REFERENCES task_lists(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      important INTEGER NOT NULL DEFAULT 0,
+      due_on TEXT,
+      repeat_rule TEXT,
+      estimate_min INTEGER CHECK (estimate_min IS NULL OR estimate_min BETWEEN 1 AND 6000),
+      start_at TEXT,
+      completed_at TEXT,
+      completed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      link_issue_id INTEGER REFERENCES issues(id) ON DELETE SET NULL,
+      link_page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
+      position REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS tasks_assignee ON tasks(assignee_id, completed_at, due_on);
+    CREATE INDEX IF NOT EXISTS tasks_list ON tasks(list_id, completed_at, position);
+    CREATE TABLE IF NOT EXISTS task_steps (
+      id INTEGER PRIMARY KEY,
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      done INTEGER NOT NULL DEFAULT 0,
+      position REAL NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS task_steps_task ON task_steps(task_id, position);
+    CREATE TABLE IF NOT EXISTS task_my_day (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      day TEXT NOT NULL,
+      PRIMARY KEY (user_id, task_id, day)
+    );
+    CREATE TABLE IF NOT EXISTS task_reminders (
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      remind_at TEXT NOT NULL,
+      sent_at TEXT,
+      PRIMARY KEY (task_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS task_reminders_due ON task_reminders(sent_at, remind_at);
     CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
       title, body, content='pages', content_rowid='id', tokenize='porter unicode61'
     );

@@ -2,17 +2,17 @@
 
 What is planned next for Folio, roughly in order. Sizes: **S** a day or two, **M** about a week, **L** more than a week. Nothing here is a promise; priorities change with what people actually use. Ideas and votes are welcome in the issues.
 
-## Next: Tasks (v0.10.0)
+## Shipped: Tasks (v0.10.0)
 
-A Microsoft To Do style task list, built in. Every task can have a **date**, a **length** and a **person**. Phased so each step ships on its own.
+A Microsoft To Do style task list, built in. Every task can have a **date**, a **length** and a **person**. All three phases of the [specification](docs/specs/tasks.md) shipped together: the list, sharing and assigning, and the week planner.
 
-| Phase | Size | What you get |
+Still to do for Tasks:
+
+| Item | Size | Notes |
 |---|---|---|
-| 1. The list that works | M | Lists, My Day, Important, Planned, steps, due dates, quick add, detail pane |
-| 2. Together | M | Length and day totals, assign to a person, shared lists, repeat, reminders, link to issues and pages |
-| 3. Planning | S to M | Week view with time boxing, calendar (`.ics`) export, daily capacity |
-
-Full specification, data model, acceptance criteria and open questions: [docs/specs/tasks.md](docs/specs/tasks.md).
+| Attachments on tasks | S | The attachment tables are keyed to a space; they need to allow a task as an owner |
+| Reorder tasks by dragging | S | Tasks keep the order they were added in |
+| Browser-level tests for the page script | S | The server and the parser are tested; the page script is checked by hand |
 
 ## Soon
 
@@ -47,4 +47,4 @@ Full specification, data model, acceptance criteria and open questions: [docs/sp
 
 ## Recently shipped
 
-See the [changelog](CHANGELOG.md). Highlights: security hardening and roles (0.9.0), the Learn area, tour and notifications (0.8.0), Windows and Linux installers (0.7.0), sub-tasks, issue links and swimlanes (0.6.0), epics, attachments and GitHub (0.5.0).
+See the [changelog](CHANGELOG.md). Highlights: Tasks (0.10.0), security hardening and roles (0.9.0), the Learn area, tour and notifications (0.8.0), Windows and Linux installers (0.7.0), sub-tasks, issue links and swimlanes (0.6.0), epics, attachments and GitHub (0.5.0).

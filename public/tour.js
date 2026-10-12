@@ -3,6 +3,7 @@
 const STEPS = [
   { title: 'Welcome to Folio', text: 'Here is a 30-second look at the places you will use most. You can skip it now and replay it any time from the Help menu.', center: true },
   { target: '.side', title: 'Your spaces live here', text: 'A space holds one team\'s pages and issues. Open one to see its Board, Backlog and page tree.', place: 'right' },
+  { target: '#tasks-link', title: 'Tasks', text: 'A quiet to-do list for the small jobs. Every task can have a date, a length and a person. Press <kbd>G</kbd> then <kbd>T</kbd> to open it.', place: 'right' },
   { target: '#create-btn', title: 'Create anything', text: 'New issues, pages and spaces start here. Tip: press <kbd>C</kbd> to create an issue from anywhere.' },
   { target: '#cmdk-open', title: 'Search everything', text: 'Press <kbd>/</kbd> or <kbd>Ctrl K</kbd> and start typing to jump to any page.' },
   { target: '#bell', title: 'Stay in the loop', text: 'New pages, new issues, assignments and @mentions show up here. You choose what you hear about.' },

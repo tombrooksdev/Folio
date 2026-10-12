@@ -16,6 +16,7 @@ import { TEMPLATES, findTemplate, fillTemplate } from './templates.js';
 import { diffLines, diffHtml } from './diff.js';
 import { parseLabels } from './issues.js';
 import { createNotifier, mountNotifications, unreadCount, watchButton } from './notify.js';
+import { mountTasks, addToTasksButton, capacityForm } from './tasks.js';
 import { mountLearn, checklistCard, hint, getFlag } from './learn.js';
 import { renderMarkdown, esc, layout, treeHtml, icon, hueClass, setKeyResolver, setMentionResolver, setAllowRemoteImages } from './render.js';
 
@@ -215,7 +216,7 @@ export function createApp(db, {
 
   // ---- account ----
   app.get('/account', (req, res) => {
-    const msg = { password: 'Password changed. Other sessions were signed out.', signout: 'Signed out of every other session.' }[req.query.ok];
+    const msg = { password: 'Password changed. Other sessions were signed out.', signout: 'Signed out of every other session.', capacity: 'Daily task capacity saved.' }[req.query.ok];
     page(res, {
       title: 'Account', user: req.user, toc: false,
       body: `<span class="eyebrow">${esc(req.user.role)}</span><h1 class="page-title">${esc(req.user.username)}</h1>
@@ -228,6 +229,7 @@ export function createApp(db, {
         <div class="section-head"><h2>Sessions</h2></div>
         <p class="muted">Signed in somewhere you no longer trust? Sign out everywhere else. Changing your password does this too.</p>
         <form method="post" action="/account/signout-everywhere"><button class="ghost">Sign out other sessions</button></form>
+        ${capacityForm(db, req.user)}
         ${req.user.role === 'admin' ? `<div class="section-head"><h2>Administration</h2></div><a class="btn ghost" href="/admin/users">${icon('settings')}Manage people</a>` : ''}`,
     });
   });
@@ -294,6 +296,9 @@ export function createApp(db, {
   mountGithub(app, ctx);
   mountNotifications(app, ctx);
   mountLearn(app, ctx);
+  const tasks = mountTasks(app, ctx);
+  app.locals.tasksTick = tasks.tick; // reminders and the morning digest; tests call it directly
+  setInterval(() => { try { tasks.tick(); } catch (e) { console.error('tasks timer:', e.message); } }, 60e3).unref();
 
   // ---- spaces ----
   app.get('/', (req, res) => {
@@ -401,6 +406,7 @@ export function createApp(db, {
             ${watchButton(notifier, req.user, 'page', p.id)}
             <form method="post" action="/p/${p.id}/star"><button class="ghost star${starred ? ' on' : ''}" aria-pressed="${starred}" title="${starred ? 'Remove from starred' : 'Add to starred'}">${icon('star')}${starred ? 'Starred' : 'Star'}</button></form>
             <a class="btn ghost" href="/s/${esc(space.key)}/create?parent=${p.id}">${icon('plus')}Child page</a>
+            ${req.user.role !== 'viewer' ? addToTasksButton('page', p.id) : ''}
             <a class="btn ghost" href="/p/${p.id}/history">${icon('clock')}History</a>
             <a class="btn ghost" href="/p/${p.id}.md">${icon('download')}Markdown</a>
             <button type="button" class="ghost width-toggle" id="width-toggle" aria-pressed="false">${icon('sidebar')}Readable width</button>
@@ -564,7 +570,7 @@ export function createApp(db, {
     const spaces = db.prepare('SELECT * FROM spaces ORDER BY name').all();
     const cur = currentId ? getPage(currentId) : null;
     const open = new Set(cur ? [cur.id, ...breadcrumbs(cur).map((c) => c.id)] : []);
-    return `<a class="nav-link${space || section === 'notifications' ? '' : ' cur'}" href="/">${icon('home')}Home</a><a class="nav-link" href="/learn">${icon('bulb')}Learn</a>
+    return `<a class="nav-link${space || section === 'notifications' ? '' : ' cur'}" href="/">${icon('home')}Home</a><a class="nav-link" id="tasks-link" href="/tasks">${icon('tasks')}Tasks</a><a class="nav-link" href="/learn">${icon('bulb')}Learn</a>
       <div class="nav-label"><span>Spaces</span><a href="/#new-space" title="New space" aria-label="New space">${icon('plus')}</a></div>
       <ul class="spaces">${spaces.map((s) => {
         const here = space && s.id === space.id;

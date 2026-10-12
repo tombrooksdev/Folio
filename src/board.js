@@ -6,6 +6,7 @@ import { logChange, mountReports, sprintStats, burndownSvg } from './reports.js'
 import { mountEpics, epicsFor, epicsPanel } from './epics.js';
 import { hint } from './learn.js';
 import { watchButton } from './notify.js';
+import { addToTasksButton } from './tasks.js';
 import {
   TYPES, PRIORITIES, STATUSES, label, initial, issueKey, sum, pointsOf, parseLabels, setLabels,
   listIssues, getIssueFull, typeIco, prioIco, avatar, epicChip, card, row, crumbs, statusChip, progressBar,
@@ -306,7 +307,7 @@ export function mountBoard(app, ctx) {
           <div class="issue-main">
             <h1 class="issue-title">${esc(i.title)}</h1>
             <div class="actions"><a class="btn ghost sm" href="/i/${i.id}/edit">${icon('edit')}Edit</a>
-              ${watchButton(notifier, req.user, 'issue', i.id)}
+              ${watchButton(notifier, req.user, 'issue', i.id)}${req.user.role !== 'viewer' ? addToTasksButton('issue', i.id) : ''}
               <button type="button" class="ghost sm" data-toggle="add-child">${icon('subtask')}Add sub-task</button>
               <button type="button" class="ghost sm" data-toggle="add-link">${icon('link')}Link issue</button>
               <form method="post" action="/i/${i.id}/delete" data-confirm="Delete this issue?${children.length ? ' Its sub-tasks become standalone issues.' : ''}"><button class="danger sm">${icon('trash')}Delete</button></form></div>

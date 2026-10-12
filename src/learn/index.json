@@ -107,6 +107,30 @@
     ]
   },
   {
+    "id": "tasks",
+    "title": "Tasks",
+    "summary": "A calm to-do list with dates, lengths and people, beside your wiki and board.",
+    "audience": "Everyone",
+    "icon": "tasks",
+    "lessons": [
+      {
+        "id": "basics",
+        "title": "Your first tasks",
+        "minutes": 3
+      },
+      {
+        "id": "quick-add",
+        "title": "Add a task in one line",
+        "minutes": 2
+      },
+      {
+        "id": "together",
+        "title": "Share, assign and plan",
+        "minutes": 3
+      }
+    ]
+  },
+  {
     "id": "github",
     "title": "Connect GitHub",
     "summary": "See commits and pull requests beside your issues.",

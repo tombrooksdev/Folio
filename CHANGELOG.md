@@ -6,6 +6,28 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.10.0] - 2026-10-12
+
+**Tasks**: a calm personal and team to-do list, beside the wiki and the board. Built from [docs/specs/tasks.md](docs/specs/tasks.md), all three phases.
+
+### Added
+- **Tasks** in the sidebar (and <kbd>G</kbd> then <kbd>T</kbd>), with smart lists: **My Day** (fresh each day, with **Suggestions** for overdue and due-soon tasks), **Important**, **Planned** (Overdue, Today, Tomorrow, This week, Later), **Assigned to me**, **All tasks** and a searchable **Completed**.
+- Your own **lists** with colours, folders and ordering. A list is private (not even administrators can read it), shared with named people (edit or view) or a team list. Viewers can read shared and team lists but not change them.
+- Every task can have a **due date**, a **length**, a **person**, **steps**, Markdown **notes** (issue keys and `@mentions` work), a **repeat** rule, a personal **reminder** and a **link** to an issue or page. **Add to my tasks** appears on every issue and page.
+- **Quick add**: one line such as `Write the launch post fri ~1h30 @sam ! #Launch`, with the understood parts shown as you type. The server reads the line itself, so it behaves the same without JavaScript.
+- **Day totals** ("3h 15m planned") in My Day and Planned, turning amber with an "Over budget" label when a day passes your **daily capacity** (6 hours by default, set per person on the Account page).
+- **Assigning**: the person is notified and sees the task in Assigned to me; they can use their own My Day and reminder; you are told when they finish it.
+- **Repeating tasks**: completing one creates the next on the right date (weekdays skip weekends, month ends are clamped).
+- **Reminders** (a timer that sends each one once and survives restarts) and a **morning summary** at 08:00 local time, using the bell and desktop alerts. Four new switches in Notification settings.
+- A **week planner**: drag a task onto a day to give it a start time, and its length becomes the block height. Every task also has a plain Schedule button, so dragging is optional.
+- **Calendar export** (`/tasks/export.ics`) of dated tasks.
+- Keyboard shortcuts on Tasks pages: <kbd>N</kbd> new, <kbd>Space</kbd> done, <kbd>D</kbd> due date, <kbd>M</kbd> My Day, <kbd>I</kbd> important, <kbd>Esc</kbd> close.
+- A **Tasks** Learn course (three lessons), a step in the tour, and a first-use hint.
+
+### Notes
+- Dates are plain dates and reminders are stored in UTC. The browser's time zone is sent in a small `tz` cookie, so "today", reminders and the morning summary follow where you are.
+- Not in this release: file attachments on tasks (the attachment tables belong to spaces; see the roadmap).
+
 ## [0.9.4] - 2026-10-12
 
 Licensing and notices.
