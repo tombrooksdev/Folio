@@ -19,7 +19,7 @@ export function epicsPanel(space, epics) {
           <a class="epic-open" href="/e/${e.id}" title="Open epic" aria-label="Open epic ${esc(e.name)}">${icon('arrow')}</a></div>
         ${progressBar(e.pts_done, e.pts)}
         <span class="muted">${e.done_count} of ${e.total} done · ${e.pts_done}/${e.pts} pts</span></div>`).join('')}
-      <form class="epic-new" method="post" action="/s/${esc(space.key)}/epics"><input name="name" placeholder="Create epic" aria-label="Epic name" required><button class="ghost sm">${icon('plus')}</button></form></div></details>`;
+      <form class="epic-new" method="post" action="/s/${esc(space.key)}/epics"><input name="name" placeholder="Create epic" aria-label="Epic name" required><button class="ghost sm" aria-label="Create epic" title="Create epic">${icon('plus')}</button></form></div></details>`;
 }
 
 export function mountEpics(app, { db, page, getSpace }) {

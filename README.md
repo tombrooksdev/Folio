@@ -111,6 +111,14 @@ Folio copies what people actually use in Confluence and Jira and leaves out what
 |---|---|
 | ![Swimlanes](docs/screenshots/swimlanes.png) | ![Diff](docs/screenshots/diff.png) |
 
+| Account menu | Themes |
+|---|---|
+| ![Account menu](docs/screenshots/menu-account.png) | ![Theme picker](docs/screenshots/menu-themes.png) |
+
+| Notification settings | People (administrators) |
+|---|---|
+| ![Notification settings](docs/screenshots/notification-settings.png) | ![People](docs/screenshots/people.png) |
+
 | Home with the getting-started checklist | Full width with the sidebar hidden |
 |---|---|
 | ![Home](docs/screenshots/home.png) | ![Sidebar hidden](docs/screenshots/sidebar-collapsed.png) |
@@ -358,10 +366,7 @@ See [CHANGELOG.md](CHANGELOG.md), also shown in the app at `/changelog` (click t
 
 ## Roadmap
 
-- [ ] Roles and per-space permissions
-- [ ] Reorder pages within the tree
-- [ ] Notifications and @mentions
-- [ ] REST API and webhooks
+Next up is **Tasks**: a Microsoft To Do style list where every task can have a date, a length and a person. See [ROADMAP.md](ROADMAP.md) and the [Tasks specification](docs/specs/tasks.md).
 
 Ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 

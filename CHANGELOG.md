@@ -6,6 +6,26 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.9.1] - 2026-10-12
+
+A tidier, calmer interface.
+
+### Changed
+- **Top bar**: icons are one consistent size and perfectly aligned, the notification badge no longer covers the bell, and Sign out moved into a new **account menu** (your avatar) with Account, Notification settings, Manage people (administrators) and Sign out.
+- All header menus (Create, notifications, help, themes, account) share one look and behave the same: one open at a time, `Esc` or a click elsewhere closes them, and focus returns to the button.
+- **Less shouting**: section labels, sidebar headings, form labels and stat captions are now normal sentence-case text instead of small monospaced capitals. Page titles are slightly smaller.
+- **Notification settings** use proper on/off switches, with a confirmation after saving.
+- Toggle buttons (Readable width and other pressed states) now show when they are on.
+- The search box in the header shows the `/` shortcut and collapses to an icon on narrow screens; the Create button does the same.
+- The tour has a new step for the account menu, and the Learn lessons describe the new header.
+
+### Added
+- `ROADMAP.md` and a full specification for the next feature, **Tasks**: a Microsoft To Do style list where every task can have a date, a length and a person (`docs/specs/tasks.md`).
+
+### Fixed
+- The search palette input and the "create epic" button had no accessible name, and the editor page had no heading for screen readers.
+- Several controls are checked by an accessibility audit across 25 pages (names, labels, duplicate ids, missing targets): no problems remain.
+
 ## [0.9.0] - 2026-10-12
 
 Security hardening, following a full audit of v0.5.0. All 16 findings are addressed (see the notes at the end of this entry). **Check "Changed" before upgrading.**
@@ -215,7 +235,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/tombrooksdev/Folio/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/tombrooksdev/Folio/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/tombrooksdev/Folio/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/tombrooksdev/Folio/compare/v0.7.0...v0.8.0

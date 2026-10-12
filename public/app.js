@@ -2,6 +2,26 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
+// ---- header menus (Create, Help, Notifications, Themes, Account): one open at a time, Escape and outside click close ----
+const menus = [];
+function menu(btnSel, menuSel, onOpen) {
+  const btn = $(btnSel), box = $(menuSel);
+  if (!btn || !box) return null;
+  const entry = { btn, box, close() { box.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); } };
+  menus.push(entry);
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = !box.classList.contains('open');
+    menus.forEach((m) => m.close());
+    if (willOpen) { box.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); onOpen?.(); }
+  });
+  // choosing a link or action closes the menu; theme swatches and toggles inside it keep it open
+  box.addEventListener('click', (e) => { if (e.target.closest('a, [data-close-menu]')) entry.close(); });
+  return entry;
+}
+document.addEventListener('click', (e) => menus.forEach((m) => { if (!m.box.contains(e.target)) m.close(); }));
+addEventListener('keydown', (e) => { if (e.key === 'Escape') { const open = menus.find((m) => m.box.classList.contains('open')); if (open) { open.close(); open.btn.focus(); } } });
+
 // stagger entrance animations
 $$('[data-i]').forEach((el) => el.style.setProperty('--i', el.dataset.i));
 
@@ -23,25 +43,22 @@ const THEMES = [
     ['contrast', 'High contrast', '#000000', '#0a0a0a', '#ffd60a'],
   ]],
 ];
-const themeBtn = $('#theme'), menu = $('#theme-menu');
+const themeBtn = $('#theme'), themeBox = $('#theme-menu');
 function setTheme(id) {
   document.documentElement.dataset.theme = id;
   try { localStorage.setItem('folio-theme', id); } catch {}
-  $$('.theme-opt', menu).forEach((b) => b.setAttribute('aria-checked', b.dataset.theme === id));
+  $$('.theme-opt', themeBox).forEach((b) => b.setAttribute('aria-checked', b.dataset.theme === id));
 }
 if (themeBtn) {
-  menu.innerHTML = THEMES.map(([group, list]) => `<h4>${group}</h4><div class="theme-grid">${list.map(([id, name]) =>
+  themeBox.innerHTML = THEMES.map(([group, list]) => `<h4>${group}</h4><div class="theme-grid">${list.map(([id, name]) =>
     `<button type="button" class="theme-opt ghost" role="menuitemradio" data-theme="${id}" aria-checked="false"><span class="swatch"><i></i><i></i><i></i></span>${name}</button>`).join('')}</div>`).join('');
   THEMES.flatMap(([, l]) => l).forEach(([id, , a, b, c]) => {
-    const sw = $$('.swatch', $(`.theme-opt[data-theme="${id}"]`, menu))[0].children;
+    const sw = $$('.swatch', $(`.theme-opt[data-theme="${id}"]`, themeBox))[0].children;
     [a, b, c].forEach((col, i) => (sw[i].style.background = col));
   });
   setTheme(document.documentElement.dataset.theme);
-  const toggle = (open) => { menu.classList.toggle('open', open); themeBtn.setAttribute('aria-expanded', open); };
-  themeBtn.addEventListener('click', (e) => { e.stopPropagation(); toggle(!menu.classList.contains('open')); });
-  menu.addEventListener('click', (e) => { const b = e.target.closest('.theme-opt'); if (b) setTheme(b.dataset.theme); });
-  document.addEventListener('click', (e) => { if (!e.target.closest('.theme-wrap')) toggle(false); });
-  addEventListener('keydown', (e) => { if (e.key === 'Escape') toggle(false); });
+  menu('#theme', '#theme-menu');
+  document.getElementById('theme-menu').addEventListener('click', (e) => { const b = e.target.closest('.theme-opt'); if (b) setTheme(b.dataset.theme); });
 }
 
 // reading progress
@@ -174,12 +191,10 @@ try { // a toast queued before a page reload (e.g. after creating an issue on th
 } catch {}
 
 const createBtn = $('#create-btn'), createMenu = $('#create-menu'), issueDlg = $('#create-issue');
-const setMenu = (open) => { createMenu?.classList.toggle('open', open); createBtn?.setAttribute('aria-expanded', open); };
-createBtn?.addEventListener('click', (e) => { e.stopPropagation(); setMenu(!createMenu.classList.contains('open')); });
-document.addEventListener('click', (e) => { if (!e.target.closest('.create-wrap')) setMenu(false); });
+const createEntry = menu('#create-btn', '#create-menu');
 function openIssueDialog() {
   if (!issueDlg) return;
-  setMenu(false);
+  createEntry?.close();
   if (!issueDlg.open) issueDlg.showModal();
   issueDlg.querySelector('[name=title]').focus();
 }
@@ -241,10 +256,9 @@ document.addEventListener('click', (e) => {
 });
 
 // ---- Help menu ----
-const helpBtn = $('#help-btn'), helpMenu = $('#help-menu');
-helpBtn?.addEventListener('click', (e) => { e.stopPropagation(); const o = !helpMenu.classList.contains('open'); helpMenu.classList.toggle('open', o); helpBtn.setAttribute('aria-expanded', o); });
-document.addEventListener('click', (e) => { if (!e.target.closest('.help-wrap')) helpMenu?.classList.remove('open'); });
-$$('[data-shortcuts]').forEach((b) => b.addEventListener('click', () => { helpMenu.classList.remove('open'); $('#shortcuts')?.showModal(); }));
+const helpEntry = menu('#help-btn', '#help-menu');
+$$('[data-shortcuts]').forEach((b) => b.addEventListener('click', () => { helpEntry?.close(); $('#shortcuts')?.showModal(); }));
+menu('#user-btn', '#user-menu');
 
 // ---- Notifications: bell, badge, polling, desktop alerts ----
 const bell = $('#bell'), bellMenu = $('#bell-menu'), bellCount = $('#bell-count');
@@ -266,13 +280,7 @@ function wireDesktopAlerts(scope) {
     });
   });
 }
-bell?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const open = !bellMenu.classList.contains('open');
-  bellMenu.classList.toggle('open', open); bell.setAttribute('aria-expanded', open);
-  if (open) loadBell();
-});
-document.addEventListener('click', (e) => { if (!e.target.closest('.bell-wrap')) bellMenu?.classList.remove('open'); });
+menu('#bell', '#bell-menu', loadBell);
 wireDesktopAlerts(document);
 let seenNote = null;
 async function poll() {

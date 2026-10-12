@@ -186,10 +186,11 @@ export function mountNotifications(app, { db, page, notifier }) {
     const on = (k) => (db.prepare('SELECT value FROM user_flags WHERE user_id = ? AND key = ?').get(req.user.id, `pref:${k}`)?.value ?? '1') === '1';
     page(res, {
       title: 'Notification settings', user: req.user, toc: false,
-      body: `<span class="eyebrow">Settings</span><h1 class="page-title">Notification settings</h1>
+      body: `<h1 class="page-title">Notification settings</h1>
         <p class="muted">Choose what appears in your bell. These settings only affect you.</p>
+        ${req.query.saved ? '<p class="ok-note" role="status">Settings saved.</p>' : ''}
         <form class="prefs" method="post" action="/settings/notifications">
-          ${Object.entries(KINDS).map(([k, [name, desc]]) => `<label class="pref"><input type="checkbox" name="${k}" value="1"${on(k) ? ' checked' : ''}><span><b>${esc(name)}</b><span class="muted">${esc(desc)}</span></span></label>`).join('')}
+          ${Object.entries(KINDS).map(([k, [name, desc]]) => `<label class="pref"><span class="pref-text"><b>${esc(name)}</b><span class="muted">${esc(desc)}</span></span><span class="switch"><input type="checkbox" name="${k}" value="1"${on(k) ? ' checked' : ''}><i aria-hidden="true"></i></span></label>`).join('')}
           <div class="actions"><button>Save settings</button><button type="button" class="ghost" id="desktop-alerts">Enable desktop alerts</button></div>
         </form>
         <p class="muted">You automatically watch pages and issues you create, edit, comment on or are assigned. Use <b>Watch</b> on any page or issue to change that.</p>`,

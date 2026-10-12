@@ -8,6 +8,7 @@ const STEPS = [
   { target: '#bell', title: 'Stay in the loop', text: 'New pages, new issues, assignments and @mentions show up here. You choose what you hear about.' },
   { target: '#help-btn', title: 'Help is one click away', text: 'Replay this tour, open the Learn area, or see every keyboard shortcut.' },
   { target: '#theme', title: 'Make it yours', text: 'Pick one of eleven themes, light or dark, including a high-contrast one.' },
+  { target: '#user-btn', title: 'Your account', text: 'Change your password, choose your notification settings and sign out from here.' },
   { title: 'You are ready', text: 'The Learn area has short lessons, and a practice space where nothing you do can hurt your real work.', center: true, last: true },
 ];
 

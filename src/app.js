@@ -597,7 +597,7 @@ export function createApp(db, {
     const tb = (name, label, sep) => `${sep ? '<span class="sep"></span>' : ''}<button type="button" class="ghost" data-md="${name}" title="${label}" aria-label="${label}">${icon(name)}</button>`;
     page(res, {
       title: heading, user: req.user, space, current: existingId, toc: false,
-      body: `${hint(db, req.user, 'editor', 'Paste or drop an image to attach it. Your work is saved in this browser as a draft while you type.')}<span class="eyebrow">${esc(heading)}</span>
+      body: `${hint(db, req.user, 'editor', 'Paste or drop an image to attach it. Your work is saved in this browser as a draft while you type.')}<h1 class="sr-only">${esc(heading)}</h1>
         <form method="post" action="${action}" id="edit-form" data-upload-space="${esc(space.key)}"${existingId ? ` data-upload-page="${existingId}"` : ''}>
           <div class="draft-banner" id="draft-banner" hidden><span id="draft-text"></span><span class="spacer"></span><button type="button" class="ghost sm" id="draft-restore">Restore draft</button><button type="button" class="link-btn" id="draft-discard">Discard</button></div>
           <input class="title-input" name="title" value="${esc(p.title)}" placeholder="Page title" aria-label="Page title" required autofocus>

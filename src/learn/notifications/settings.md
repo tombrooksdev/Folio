@@ -2,11 +2,11 @@
 title: Choose what you hear about
 minutes: 2
 ---
-Open **Notification settings** from the bell menu to choose what reaches you.
+Open **Notification settings** from the bell menu, or from your avatar menu, to choose what reaches you.
 
 ## Per type
 
-Switch each type on or off: new pages, new issues, updates to things you watch, comments, assignments, mentions and sprint events. Your choices apply only to you.
+Use the switches to turn each type on or off: new pages, new issues, updates to things you watch, comments, assignments, mentions and sprint events. Your choices apply only to you.
 
 ## Desktop alerts
 

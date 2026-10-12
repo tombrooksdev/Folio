@@ -137,30 +137,37 @@ export function layout({ title, user, body, sidebar = '', toc = false, bare = fa
 <body${spaceKey ? ` data-space="${esc(spaceKey)}"` : ''}${editUrl ? ` data-edit="${esc(editUrl)}"` : ''}${tour && !bare ? ' data-tour="1"' : ''}>
 <div class="progress" id="progress"></div>
 ${bare ? body : `<header class="top">
-  <a class="brand" href="/">folio<i>.</i></a>
-  ${
-    user
-      ? `<button class="icon-btn" type="button" id="side-toggle" aria-label="Toggle sidebar">${icon('sidebar')}</button>
-         ${canWrite ? `<div class="create-wrap"><button class="create-btn" type="button" id="create-btn" aria-haspopup="true" aria-expanded="false">${icon('plus')}Create</button>
-           <div class="create-menu" id="create-menu" role="menu">
-             <button type="button" role="menuitem" data-create="issue">${icon('task')}<span>Issue<small>Story, bug or task</small></span><kbd>C</kbd></button>
-             <a role="menuitem" href="${spaces.length ? `/s/${esc(spaceKey || spaces[0].key)}/create` : '/#new-space'}">${icon('file')}<span>Page<small>From a template or blank</small></span></a>
-             <a role="menuitem" href="/#new-space">${icon('board')}<span>Space<small>A home for a team or project</small></span></a>
-           </div></div>` : ''}
-         <button class="cmdk-btn ghost" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search pages</span><kbd>Ctrl K</kbd></button>
-         <div class="bell-wrap"><button class="icon-btn" type="button" id="bell" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">${icon('bell')}<span class="badge" id="bell-count"${unread ? '' : ' hidden'}>${unread > 99 ? '99+' : unread}</span></button><div class="bell-menu" id="bell-menu"></div></div>
-         <div class="help-wrap"><button class="icon-btn" type="button" id="help-btn" aria-label="Help" aria-haspopup="true" aria-expanded="false">${icon('help')}</button>
-           <div class="help-menu" id="help-menu" role="menu">
-             <a role="menuitem" href="/learn">${icon('bulb')}Learn Folio</a>
-             <button type="button" role="menuitem" data-tour-start>${icon('play')}Take the tour</button>
-             <button type="button" role="menuitem" data-shortcuts>${icon('edit')}Keyboard shortcuts<kbd>?</kbd></button>
-             <a role="menuitem" href="/changelog">${icon('file')}What's new</a>
-           </div></div>
-         <div class="theme-wrap"><button class="icon-btn" type="button" id="theme" aria-label="Choose theme" aria-haspopup="true" aria-expanded="false">${icon('palette')}</button><div class="theme-menu" id="theme-menu" role="menu"></div></div>
-         <a class="avatar" href="/account" title="${esc(user.username)}: account and password">${initial}</a>
-         <form method="post" action="/logout"><button class="ghost sm">Sign out</button></form>`
-      : '<span class="spacer"></span>'
-  }
+  <div class="top-left">
+    <a class="brand" href="/">folio<i>.</i></a>
+    ${user ? `<button class="icon-btn" type="button" id="side-toggle" aria-label="Toggle sidebar" title="Show or hide the sidebar">${icon('sidebar')}</button>
+    ${canWrite ? `<div class="menu-wrap"><button class="create-btn" type="button" id="create-btn" aria-haspopup="true" aria-expanded="false">${icon('plus')}<span>Create</span></button>
+      <div class="menu create-menu" id="create-menu" role="menu">
+        <button type="button" role="menuitem" data-create="issue">${icon('task')}<span>Issue<small>Story, bug or task</small></span><kbd>C</kbd></button>
+        <a role="menuitem" href="${spaces.length ? `/s/${esc(spaceKey || spaces[0].key)}/create` : '/#new-space'}">${icon('file')}<span>Page<small>From a template or blank</small></span></a>
+        <a role="menuitem" href="/#new-space">${icon('board')}<span>Space<small>A home for a team or project</small></span></a>
+      </div></div>` : ''}` : ''}
+  </div>
+  ${user ? `<div class="top-right">
+    <button class="cmdk-btn" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search</span><kbd>/</kbd></button>
+    <div class="menu-wrap"><button class="icon-btn" type="button" id="bell" aria-label="Notifications" title="Notifications" aria-haspopup="true" aria-expanded="false"><span class="ico">${icon('bell')}<span class="badge" id="bell-count"${unread ? '' : ' hidden'}>${unread > 99 ? '99+' : unread}</span></span></button><div class="menu bell-menu" id="bell-menu"></div></div>
+    <div class="menu-wrap"><button class="icon-btn" type="button" id="help-btn" aria-label="Help" title="Help" aria-haspopup="true" aria-expanded="false">${icon('help')}</button>
+      <div class="menu help-menu" id="help-menu" role="menu">
+        <a role="menuitem" href="/learn">${icon('bulb')}Learn Folio</a>
+        <button type="button" role="menuitem" data-tour-start data-close-menu>${icon('play')}Take the tour</button>
+        <button type="button" role="menuitem" data-shortcuts>${icon('edit')}Keyboard shortcuts<kbd>?</kbd></button>
+        <a role="menuitem" href="/changelog">${icon('file')}What's new</a>
+      </div></div>
+    <div class="menu-wrap"><button class="icon-btn" type="button" id="theme" aria-label="Choose a theme" title="Theme" aria-haspopup="true" aria-expanded="false">${icon('palette')}</button><div class="menu theme-menu" id="theme-menu" role="menu"></div></div>
+    <span class="top-sep" aria-hidden="true"></span>
+    <div class="menu-wrap"><button class="avatar-btn" type="button" id="user-btn" aria-label="Account menu for ${esc(user.username)}" aria-haspopup="true" aria-expanded="false"><span class="avatar">${initial}</span></button>
+      <div class="menu user-menu" id="user-menu" role="menu">
+        <div class="user-head"><span class="avatar">${initial}</span><span><b>${esc(user.username)}</b><small>${esc(user.role === 'admin' ? 'Administrator' : user.role === 'viewer' ? 'Viewer' : 'Member')}</small></span></div>
+        <a role="menuitem" href="/account">${icon('settings')}Account and password</a>
+        <a role="menuitem" href="/settings/notifications">${icon('bell')}Notification settings</a>
+        ${user.role === 'admin' ? `<a role="menuitem" href="/admin/users">${icon('board')}Manage people</a>` : ''}
+        <form method="post" action="/logout" class="menu-sep"><button role="menuitem">${icon('arrow')}Sign out</button></form>
+      </div></div>
+  </div>` : '<span class="spacer"></span>'}
 </header>
 <div class="shell${sidebar ? ' has-side' : ''}${sidebar && !toc ? ' no-toc' : ''}">
   ${sidebar ? `<nav class="side" aria-label="Pages">${sidebar}</nav>` : ''}
@@ -169,7 +176,7 @@ ${bare ? body : `<header class="top">
 </div>`}
 ${user && !bare ? createDialogs({ spaces, people, spaceKey, canWrite }) : ''}
 <div class="cmdk" id="cmdk" role="dialog" aria-modal="true" aria-label="Search">
-  <div class="cmdk-box"><input id="cmdk-input" placeholder="Search every page..." autocomplete="off"><div class="cmdk-list" id="cmdk-list"></div></div>
+  <div class="cmdk-box"><input id="cmdk-input" type="search" placeholder="Search every page..." aria-label="Search every page" autocomplete="off"><div class="cmdk-list" id="cmdk-list"></div></div>
 </div>
 <script src="/app.js"></script>
 ${user && !bare ? '<script src="/tour.js"></script>' : ''}

@@ -11,6 +11,7 @@ Folio keeps your team's **documents** and **work** in one place. Every screen ha
 - **Bell** shows what has happened since you last looked.
 - **Help** (the `?` button) replays the tour and opens this training area.
 - **Palette** switches between eleven themes, light and dark.
+- **Your avatar** (far right) opens your account menu: password, notification settings, and sign out.
 
 ## The sidebar
 
