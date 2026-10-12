@@ -6,6 +6,16 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.12.0] - 2026-10-12
+
+### Added
+- **An @mentions picker.** Type `@` in a page, an issue description, a comment, a task's notes or the Tasks quick-add box, and a list of people appears at the cursor. Keep typing to narrow it, use the arrow keys with <kbd>Enter</kbd> or <kbd>Tab</kbd> (or the mouse) to choose, <kbd>Esc</kbd> to close. An email address such as `tom@example.com` does not open it.
+- **Reorder pages in the tree by dragging.** In the sidebar, drop a page on the top edge of another to put it before, the bottom edge to put it after, or the middle to make it a child. A page cannot be dropped into its own child pages. Without a mouse, the page editor has **Move up** and **Move down**.
+
+### Changed
+- Pages stay alphabetical until someone orders a group by hand. After that, new pages in that group go to the end. Existing databases get a `position` column and keep their current order.
+- A page restored from the trash returns to its old place.
+
 ## [0.11.0] - 2026-10-12
 
 ### Added

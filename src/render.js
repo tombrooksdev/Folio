@@ -138,7 +138,7 @@ export function layout({ title, user, body, sidebar = '', toc = false, bare = fa
 <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/style.css">
 <script src="/theme.js"></script></head>
-<body${spaceKey ? ` data-space="${esc(spaceKey)}"` : ''}${editUrl ? ` data-edit="${esc(editUrl)}"` : ''}${tour && !bare ? ' data-tour="1"' : ''}>
+<body${spaceKey ? ` data-space="${esc(spaceKey)}"` : ''}${editUrl ? ` data-edit="${esc(editUrl)}"` : ''}${tour && !bare ? ' data-tour="1"' : ''}${canWrite && user && !bare ? ' data-write="1"' : ''}>
 <div class="progress" id="progress"></div>
 ${bare ? body : `<header class="top">
   <div class="top-left">
@@ -183,7 +183,7 @@ ${user && !bare ? createDialogs({ spaces, people, spaceKey, canWrite }) : ''}
   <div class="cmdk-box"><input id="cmdk-input" type="search" placeholder="Search every page..." aria-label="Search every page" autocomplete="off"><div class="cmdk-list" id="cmdk-list"></div></div>
 </div>
 <script src="/app.js"></script>
-${user && !bare ? '<script src="/tour.js"></script>' : ''}
+${user && !bare ? '<script src="/tour.js"></script><script type="module" src="/mentions.js"></script>' : ''}${user && !bare && canWrite ? '<script src="/tree.js"></script>' : ''}
 </body></html>`;
 }
 
@@ -212,7 +212,7 @@ export function treeHtml(nodes, currentId, open = new Set()) {
     .map((n) => {
       const kids = n.children.length > 0;
       const isOpen = open.has(n.id);
-      return `<li${kids ? ` class="has-kids${isOpen ? ' open' : ''}" data-id="${n.id}"` : ''}>
+      return `<li data-page="${n.id}"${kids ? ` class="has-kids${isOpen ? ' open' : ''}" data-id="${n.id}"` : ''}>
         ${kids ? `<button type="button" class="twisty" aria-label="Expand ${esc(n.title)}" aria-expanded="${isOpen}">${icon('chevron')}</button>` : '<span class="twisty-gap"></span>'}<a href="/p/${n.id}"${n.id === currentId ? ' class="cur" aria-current="page"' : ''}>${esc(n.title)}</a>${treeHtml(n.children, currentId, open)}</li>`;
     })
     .join('')}</ul>`;

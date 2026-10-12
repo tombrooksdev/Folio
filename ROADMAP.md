@@ -13,10 +13,8 @@ Attachments on tasks, reordering by dragging and browser tests followed in 0.10.
 | Feature | Size | Why |
 |---|---|---|
 | Two-factor sign-in (TOTP) | M | The strongest protection for administrator accounts |
-| Reorder pages in the tree by dragging | S | Alphabetical is not always the right order |
 | Page templates you can create and edit | S | The built-in ones are a start; teams want their own |
 | Notifications by email (optional SMTP) | M | For people who live in their inbox, off by default |
-| @mentions picker and richer comments | S | Type `@` and choose a person |
 
 ## Later
 
@@ -40,4 +38,4 @@ Attachments on tasks, reordering by dragging and browser tests followed in 0.10.
 
 ## Recently shipped
 
-See the [changelog](CHANGELOG.md). Highlights: a recycle bin (0.11.0), Tasks (0.10.0 and 0.10.1), security hardening and roles (0.9.0), the Learn area, tour and notifications (0.8.0), Windows and Linux installers (0.7.0), sub-tasks, issue links and swimlanes (0.6.0), epics, attachments and GitHub (0.5.0).
+See the [changelog](CHANGELOG.md). Highlights: the @mentions picker and dragging pages in the tree (0.12.0), a recycle bin (0.11.0), Tasks (0.10.0 and 0.10.1), security hardening and roles (0.9.0), the Learn area, tour and notifications (0.8.0), Windows and Linux installers (0.7.0), sub-tasks, issue links and swimlanes (0.6.0), epics, attachments and GitHub (0.5.0).

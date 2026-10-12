@@ -300,6 +300,7 @@ export function openDb(file) {
   if (!db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get()) db.exec("UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users)");
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_username_nocase ON users (username COLLATE NOCASE)'); } catch { /* existing look-alike accounts: keep working, the app also checks case-insensitively */ }
   upgradeAttachments(db);
+  addColumn(db, 'pages', 'position', 'REAL NOT NULL DEFAULT 0'); // order among sibling pages; 0 everywhere means alphabetical
   addColumn(db, 'issues', 'parent_id', 'INTEGER REFERENCES issues(id) ON DELETE SET NULL');
   addColumn(db, 'spaces', 'github_repo', 'TEXT');
   // Sprints that were started before burndown tracking existed get a starting snapshot from their current issues.
@@ -353,6 +354,9 @@ export function tx(db, fn) {
   }
 }
 
+// Sibling pages: by their saved position, then alphabetically (so a group nobody has reordered stays alphabetical).
+export const byOrder = (a, b) => (a.position ?? 0) - (b.position ?? 0) || a.title.localeCompare(b.title);
+
 export function buildTree(pages) {
   const byParent = new Map();
   for (const p of pages) {
@@ -362,7 +366,7 @@ export function buildTree(pages) {
   }
   const walk = (pid) =>
     (byParent.get(pid) ?? [])
-      .sort((a, b) => a.title.localeCompare(b.title))
+      .sort(byOrder)
       .map((p) => ({ ...p, children: walk(p.id) }));
   return walk(0);
 }

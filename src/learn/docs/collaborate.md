@@ -10,7 +10,7 @@ Scroll to the bottom of a page and add a **comment**. Use **Reply** to answer a 
 
 ## Mentions
 
-Type `@` followed by a username, such as `@sam`, in a page, comment or issue. That person gets a notification straight away, even if they weren't watching.
+Type `@` followed by a username, such as `@sam`, in a page, comment or issue. That person gets a notification straight away, even if they weren't watching. As you type the `@`, a list of people appears: keep typing to narrow it, then press <kbd>Enter</kbd> or <kbd>Tab</kbd> to choose, or <kbd>Esc</kbd> to close it.
 
 ## Issue keys
 

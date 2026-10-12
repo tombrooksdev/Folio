@@ -44,7 +44,7 @@ Folio follows the conventions people already know from tools like Confluence and
 - Full-text search (SQLite FTS5, word-stem matching, highlighted snippets) and a <kbd>Ctrl</kbd>+<kbd>K</kbd> command palette
 - Per-page "On this page" outline with scroll-spy, heading anchors, copy buttons on code blocks
 - **Attachments**: drop files on a page, or paste and drop images straight into the editor; images embed inline
-- **Page comments** with replies, and **move pages** between parents from the editor
+- **Page comments** with replies, **move pages** between parents from the editor, and **drag pages** in the sidebar tree to reorder or nest them
 - **Templates** (meeting notes, decision record, runbook and more), **panels** (`> [!WARNING]`), page **labels**, **starred** and **recently viewed** pages
 - **Compare versions** with a line diff, and **draft autosave** so you never lose an edit
 - Export any page as `.md`
@@ -83,7 +83,7 @@ Folio follows the conventions people already know from tools like Confluence and
 - A built-in **Learn** area: seven short courses (26 lessons) with progress tracking
 - A one-click **practice space** with sample pages, epics and a running sprint
 - A **first-login tour**, a self-ticking **getting-started checklist** and dismissible hints
-- **Notifications**: a bell, inbox, watching, `@mentions`, per-person settings, desktop alerts and an optional Slack / Teams / Discord webhook
+- **Notifications**: a bell, inbox, watching, `@mentions` with a type-ahead picker, per-person settings, desktop alerts and an optional Slack / Teams / Discord webhook
 
 **Make it yours**
 - **11 built-in themes** (5 light, 6 dark), defaulting to the tombrooks.dev palette

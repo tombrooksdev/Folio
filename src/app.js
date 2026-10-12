@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { readFileSync } from 'node:fs';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { buildTree, ftsQuery, tx } from './db.js';
+import { buildTree, byOrder, ftsQuery, tx } from './db.js';
 import {
   COOKIE, HOST_COOKIE, ROLES, MIN_PASSWORD, hashPassword, verifyPassword, verifyOrDummy, validatePassword, validateUsername,
   createSession, userForToken, destroySession, destroyOtherSessions, purgeExpiredSessions,
@@ -215,6 +215,9 @@ export function createApp(db, {
   app.use(['/preview', '/search.json'], (req, res, next) => (hot.allowed(req.user.id) ? (hot.hit(req.user.id), next()) : deny(req, res, 429, 'Slow down a little')));
   app.use('/attachments', (req, res, next) => (req.method !== 'POST' || uploads.allowed(req.user.id) ? (req.method === 'POST' && uploads.hit(req.user.id), next()) : deny(req, res, 429, 'Too many uploads, try again in a minute')));
 
+  // Names for the @mention picker.
+  app.get('/people.json', (req, res) => res.json(db.prepare('SELECT username FROM users ORDER BY username COLLATE NOCASE').all().map((u) => u.username)));
+
   // ---- account ----
   app.get('/account', (req, res) => {
     const msg = { password: 'Password changed. Other sessions were signed out.', signout: 'Signed out of every other session.', capacity: 'Daily task capacity saved.' }[req.query.ok];
@@ -381,8 +384,8 @@ export function createApp(db, {
     let parentId = req.body.parent_id ? Number(req.body.parent_id) : null;
     if (parentId && getPage(parentId)?.space_id !== space.id) parentId = null;
     const id = tx(db, () => {
-      const r = db.prepare('INSERT INTO pages (space_id, parent_id, title, body, updated_by) VALUES (?, ?, ?, ?, ?)')
-        .run(space.id, parentId, title, str(req.body.body, 1e6, { trim: false }), req.user.id);
+      const r = db.prepare('INSERT INTO pages (space_id, parent_id, title, body, updated_by, position) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(space.id, parentId, title, str(req.body.body, 1e6, { trim: false }), req.user.id, endPosition(space.id, parentId));
       files.adopt(space.id, { page_id: Number(r.lastInsertRowid) }, req.body.body);
       setPageLabels(Number(r.lastInsertRowid), req.body.labels);
       return Number(r.lastInsertRowid);
@@ -447,8 +450,8 @@ export function createApp(db, {
     }
     tx(db, () => {
       db.prepare('INSERT INTO versions (page_id, title, body, edited_by) VALUES (?, ?, ?, ?)').run(p.id, p.title, p.body, p.updated_by);
-      db.prepare("UPDATE pages SET title = ?, body = ?, parent_id = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?")
-        .run(title, str(req.body.body, 1e6, { trim: false }), parentId, req.user.id, p.id);
+      db.prepare("UPDATE pages SET title = ?, body = ?, parent_id = ?, position = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?")
+        .run(title, str(req.body.body, 1e6, { trim: false }), parentId, parentId === p.parent_id ? p.position : endPosition(p.space_id, parentId), req.user.id, p.id);
       files.adopt(p.space_id, { page_id: p.id }, req.body.body);
       if ('labels' in req.body) setPageLabels(p.id, req.body.labels);
     });
@@ -461,6 +464,33 @@ export function createApp(db, {
     const space = db.prepare('SELECT key FROM spaces WHERE id = ?').get(p.space_id);
     const id = trash.trashPage(p, req.user); // children go with it; Restore brings them all back
     res.redirect(`/s/${space.key}?trashed=${id}`);
+  });
+  // Reorder in the tree. Dragging sends target + where (before | after | inside); the editor buttons send dir (up | down).
+  app.post('/p/:id(\\d+)/move', (req, res) => {
+    const p = getPage(Number(req.params.id));
+    if (!p) return res.status(404).send('No such page');
+    const siblings = (parentId, withSelf) => db.prepare('SELECT id, title, position FROM pages WHERE space_id = ? AND parent_id IS ?' + (withSelf ? '' : ' AND id != ?')).all(...[p.space_id, parentId, ...(withSelf ? [] : [p.id])]).sort(byOrder);
+    let parent = p.parent_id, list;
+    const b = req.body;
+    if (b.dir === 'up' || b.dir === 'down') {
+      list = siblings(parent, true);
+      const i = list.findIndex((s) => s.id === p.id), j = b.dir === 'up' ? i - 1 : i + 1;
+      if (j >= 0 && j < list.length) [list[i], list[j]] = [list[j], list[i]];
+    } else {
+      const t = getPage(Number(b.target));
+      if (!t || t.space_id !== p.space_id || t.id === p.id || !['before', 'after', 'inside'].includes(b.where)) return deny(req, res, 400, 'Drop it on another page in this space');
+      parent = b.where === 'inside' ? t.id : t.parent_id;
+      if (parent && descendantIds(p.id).includes(parent)) return deny(req, res, 400, 'A page cannot go under its own child pages');
+      list = siblings(parent, false);
+      const at = list.findIndex((s) => s.id === t.id);
+      list.splice(b.where === 'inside' ? list.length : b.where === 'before' ? at : at + 1, 0, { id: p.id });
+    }
+    tx(db, () => {
+      db.prepare('UPDATE pages SET parent_id = ? WHERE id = ? AND parent_id IS NOT ?').run(parent, p.id, parent);
+      list.forEach((s, k) => db.prepare('UPDATE pages SET position = ? WHERE id = ? AND position != ?').run(k + 1, s.id, k + 1));
+    });
+    if (wantsJson(req)) return res.json({ ok: true });
+    res.redirect(/^\/p\/\d+\/edit$/.test(b.back) ? b.back : `/p/${p.id}`);
   });
   app.post('/p/:id/star', (req, res) => {
     const p = getPage(Number(req.params.id));
@@ -567,7 +597,7 @@ export function createApp(db, {
   // ---- helpers ----
   function getSpace(key) { return db.prepare('SELECT * FROM spaces WHERE key = ?').get(String(key).toUpperCase()); }
   function getPage(id) { return Number.isInteger(id) ? db.prepare('SELECT * FROM pages WHERE id = ?').get(id) : undefined; }
-  function spaceTree(spaceId) { return buildTree(db.prepare('SELECT id, parent_id, title FROM pages WHERE space_id = ?').all(spaceId)); }
+  function spaceTree(spaceId) { return buildTree(db.prepare('SELECT id, parent_id, title, position FROM pages WHERE space_id = ?').all(spaceId)); }
   function spaceOf(p) { return db.prepare('SELECT * FROM spaces WHERE id = ?').get(p.space_id); }
   // Confluence-style nav: Home, then every space; the current space expands into its page tree.
   function sidebar(space, currentId, section) {
@@ -583,6 +613,11 @@ export function createApp(db, {
           : ''}</li>`;
       }).join('')}</ul>
       <p class="credit"><a href="/changelog" title="What's new">folio v${VERSION}</a> · by <a href="https://tombrooks.dev" target="_blank" rel="noopener">tombrooks.dev</a></p>`;
+  }
+  // Where a page lands among its siblings: at the end once the group has been ordered by hand, otherwise alphabetical (position 0).
+  function endPosition(spaceId, parentId) {
+    const max = db.prepare('SELECT COALESCE(MAX(position), 0) m FROM pages WHERE space_id = ? AND parent_id IS ?').get(spaceId, parentId).m;
+    return max > 0 ? max + 1 : 0;
   }
   function setPageLabels(pageId, text) {
     db.prepare('DELETE FROM page_labels WHERE page_id = ?').run(pageId);
@@ -624,6 +659,7 @@ export function createApp(db, {
           </div>
           <div class="actions"><button>${icon('save')}Save page</button><a class="btn ghost" href="${existingId ? `/p/${existingId}` : `/s/${esc(space.key)}`}">Cancel</a></div>
         </form>
+        ${existingId ? `<form class="actions move-form" method="post" action="/p/${existingId}/move"><input type="hidden" name="back" value="/p/${existingId}/edit"><span class="muted">Position among its siblings</span><button name="dir" value="up" class="ghost sm">${icon('up')}Move up</button><button name="dir" value="down" class="ghost sm">${icon('down')}Move down</button></form>` : ''}
         ${existingId ? `<form method="post" action="/p/${existingId}/delete" data-confirm="Move this page and its child pages to the trash? You can restore them for 30 days."><button class="danger">${icon('trash')}Delete page</button></form>` : ''}
         <script src="/files.js"></script><script src="/editor.js"></script>`,
     });

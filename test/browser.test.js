@@ -168,4 +168,72 @@ test('deleting a page offers Undo, and Restore from the trash works', { skip }, 
   await done();
 });
 
+test('the @mention picker works in the editor and in quick add, by keyboard and mouse', { skip }, async () => {
+  const { page, base, errors, db, done } = await session();
+  const hash = db.prepare('SELECT password_hash h FROM users').get().h;
+  for (const n of ['sam', 'sarah', 'ann']) db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run(n, hash);
+  await page.goto(`${base}/`);
+  await page.evaluate(() => fetch('/spaces', { method: 'POST', body: new URLSearchParams({ name: 'Eng', key: 'ENG' }) }));
+  await page.goto(`${base}/s/ENG/new`);
+  const body = page.locator('#body');
+  await body.click();
+  await body.pressSequentially('Thanks @sa');
+  await page.waitForSelector('.mention-pop');
+  assert.deepEqual(await page.$$eval('.mention-name', (o) => o.map((e) => e.textContent)), ['sam', 'sarah']);
+  assert.equal(await body.getAttribute('aria-expanded'), 'true');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  assert.equal(await body.inputValue(), 'Thanks @sarah '); // chosen, not submitted
+  assert.equal(await page.locator('.mention-pop').count(), 0);
+  await page.waitForFunction(() => /sarah/.test(document.querySelector('#preview').textContent)); // the live preview saw the change
+  await body.pressSequentially('and @a');
+  await page.waitForSelector('.mention-pop');
+  await page.locator('.mention-opt', { hasText: 'ann' }).click(); // the mouse works too
+  assert.equal(await body.inputValue(), 'Thanks @sarah and @ann ');
+  await body.pressSequentially('mail tom@x');
+  assert.equal(await page.locator('.mention-pop').count(), 0); // an email address does not open it
+  await body.pressSequentially(' @');
+  await page.waitForSelector('.mention-pop');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.mention-pop').count(), 0);
+  assert.match(await body.inputValue(), / @$/); // Escape only closed the list
+  // Tasks quick add: Enter picks a person instead of adding the task
+  await page.goto(`${base}/tasks/my-day`);
+  await page.click('#quick-add');
+  await page.locator('#quick-add').pressSequentially('Call back @sam');
+  await page.waitForSelector('.mention-pop');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.inputValue('#quick-add'), 'Call back @sam ');
+  assert.equal(await page.locator('.task-row').count(), 0);
+  assert.match(await page.textContent('#quick-help'), /@sam/); // the chips saw it too
+  assert.deepEqual(errors, []);
+  await done();
+});
+
+test('dragging a page in the sidebar reorders and nests it', { skip }, async () => {
+  const { page, base, errors, db, done } = await session();
+  await page.goto(`${base}/`);
+  await page.evaluate(async () => {
+    await fetch('/spaces', { method: 'POST', body: new URLSearchParams({ name: 'Eng', key: 'ENG' }) });
+    for (const t of ['Alpha', 'Beta', 'Gamma']) await fetch('/s/ENG/pages', { method: 'POST', body: new URLSearchParams({ title: t, body: t }) });
+  });
+  await page.goto(`${base}/p/1`);
+  const names = () => page.$$eval('.space-body > .tree > li > a', (a) => a.map((e) => e.textContent.trim()).join(','));
+  assert.equal(await names(), 'Alpha,Beta,Gamma');
+  const gamma = page.locator('.tree li[data-page="3"] > a'), alpha = page.locator('.tree li[data-page="1"] > a');
+  const h = (await alpha.boundingBox()).height;
+  await gamma.dragTo(alpha, { targetPosition: { x: 20, y: 2 } }); // top edge: before
+  await page.waitForFunction(() => document.querySelector('.space-body > .tree > li > a').textContent.trim() === 'Gamma');
+  assert.equal(await names(), 'Gamma,Alpha,Beta');
+  await page.locator('.tree li[data-page="2"] > a').dragTo(page.locator('.tree li[data-page="3"] > a'), { targetPosition: { x: 20, y: h / 2 } }); // middle: inside
+  await page.waitForFunction(() => document.querySelectorAll('.space-body > .tree > li').length === 2);
+  assert.equal(db.prepare("SELECT parent_id FROM pages WHERE title = 'Beta'").get().parent_id, 3);
+  assert.equal(await names(), 'Gamma,Alpha');
+  // a page cannot be dropped into its own child
+  await page.locator('.tree li[data-page="3"] > a').dragTo(page.locator('.tree li[data-page="2"] > a'), { targetPosition: { x: 20, y: h / 2 } }).catch(() => {});
+  assert.equal(db.prepare("SELECT parent_id FROM pages WHERE title = 'Gamma'").get().parent_id, null);
+  assert.deepEqual(errors, []);
+  await done();
+});
+
 test.after(async () => { await browser?.close(); });
