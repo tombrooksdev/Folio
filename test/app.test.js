@@ -13,24 +13,30 @@ async function boot(opts = {}) {
   const server = createApp(db, { uploadDir, ...opts }).listen(0);
   server.unref();
   const base = `http://localhost:${server.address().port}`;
-  let cookie = '';
-  const req = async (path, { method = 'GET', form, raw, headers = {} } = {}) => {
-    const r = await fetch(base + path, {
-      method, redirect: 'manual',
-      headers: { cookie, ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...(raw && { 'content-type': 'application/octet-stream' }), ...headers },
-      body: raw ?? (form && new URLSearchParams(form)),
-    });
-    const sc = r.headers.get('set-cookie');
-    if (sc) cookie = sc.split(';')[0];
-    return { status: r.status, loc: r.headers.get('location'), text: await r.text(), headers: r.headers };
+  // each client has its own cookie jar, so tests can act as several people
+  const client = () => {
+    let cookie = '';
+    return async (path, { method = 'GET', form, raw, headers = {} } = {}) => {
+      const r = await fetch(base + path, {
+        method, redirect: 'manual',
+        headers: { cookie, ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...(raw && { 'content-type': 'application/octet-stream' }), ...headers },
+        body: raw ?? (form && new URLSearchParams(form)),
+      });
+      const sc = r.headers.getSetCookie?.() ?? [];
+      const sid = sc.map((c) => c.split(';')[0]).filter((c) => /sid=[0-9a-f]/.test(c)).at(-1);
+      if (sid) cookie = sid;
+      return { status: r.status, loc: r.headers.get('location'), text: await r.text(), headers: r.headers, cookies: sc };
+    };
   };
-  return { req, uploadDir, db, close: () => server.close() };
+  const req = client();
+  const loginAs = async (username, password) => { const c = client(); const r = await c('/login', { method: 'POST', form: { username, password } }); if (r.status !== 302) throw new Error(`login failed for ${username}: ${r.status}`); return c; };
+  return { req, client, loginAs, base, uploadDir, db, close: () => server.close() };
 }
 
 test('setup, spaces, pages, history, search, sanitising', async () => {
   const { req, close } = await boot();
   assert.equal((await req('/')).loc, '/setup');
-  assert.equal((await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } })).loc, '/');
+  assert.equal((await req('/setup', { method: 'POST', form: { username: 'tom', password: 'correct-horse-9' } })).loc, '/');
   assert.equal((await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'eng' } })).loc, '/s/ENG');
 
   const created = await req('/s/ENG/pages', { method: 'POST', form: { title: 'Runbook', body: '# Hi\n\nrestarting <script>alert(1)</script> servers' } });
@@ -57,16 +63,16 @@ test('setup, spaces, pages, history, search, sanitising', async () => {
 
 test('login rejects bad password and logout works', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/logout', { method: 'POST' });
-  assert.equal((await req('/login', { method: 'POST', form: { username: 'a', password: 'nope' } })).status, 401);
-  assert.equal((await req('/login', { method: 'POST', form: { username: 'a', password: 'longenough' } })).loc, '/');
+  assert.equal((await req('/login', { method: 'POST', form: { username: 'ann', password: 'nope' } })).status, 401);
+  assert.equal((await req('/login', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } })).loc, '/');
   close();
 });
 
 test('scrum: sprint lifecycle, drag/move, ordering, completion', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const mk = async (title, extra = {}) => (await req('/s/ENG/issues', { method: 'POST', form: { title, ...extra } })).loc.split('/')[2];
   const a = await mk('Login page', { points: '3', type: 'story' });
@@ -105,7 +111,7 @@ test('scrum: sprint lifecycle, drag/move, ordering, completion', async () => {
 
 test('reports: burndown, velocity and sprint history', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const mk = async (title, points) => (await req('/s/ENG/issues', { method: 'POST', form: { title, points } })).loc.split('/')[2];
   const a = await mk('One', '3'), b = await mk('Two', '5'), c = await mk('Three', '2');
@@ -133,7 +139,7 @@ test('reports: burndown, velocity and sprint history', async () => {
 
 test('issue sidebar: inline field edits update the issue and the burndown log', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const id = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Thing', points: '3' } })).loc.split('/')[2];
   assert.equal((await req(`/i/${id}/field`, { method: 'POST', form: { field: 'status', value: 'doing' } })).loc, `/i/${id}`);
@@ -148,7 +154,7 @@ test('issue sidebar: inline field edits update the issue and the burndown log', 
 
 test('changelog page renders from CHANGELOG.md with the package version', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   const { version } = JSON.parse((await import('node:fs')).readFileSync(new URL('../package.json', import.meta.url)));
   const page = (await req('/changelog')).text;
   assert.match(page, new RegExp(`Folio v${version.replaceAll('.', '\\.')}`));
@@ -160,7 +166,7 @@ test('changelog page renders from CHANGELOG.md with the package version', async 
 
 test('epics and labels: create, assign, filter, progress', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   await req('/s/ENG/epics', { method: 'POST', form: { name: 'Onboarding' } });
   const epicId = (await req('/s/ENG/backlog')).text.match(/data-epic-pick="(\d+)"/)[1];
@@ -190,7 +196,7 @@ test('epics and labels: create, assign, filter, progress', async () => {
 
 test('attachments: upload, serve safely, adopt pasted images, delete', async () => {
   const { req, uploadDir, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const png = Buffer.from('89504e470d0a1a0a', 'hex');
   const up = JSON.parse((await req('/attachments?space=ENG&name=shot.png', { method: 'POST', raw: png })).text);
@@ -236,7 +242,7 @@ test('attachments: upload, serve safely, adopt pasted images, delete', async () 
 
 test('attachments: uploads over the size limit are refused', async () => {
   const { req, close } = await boot({ maxUploadMb: 1 });
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const res = await req('/attachments?space=ENG&name=big.bin', { method: 'POST', raw: Buffer.alloc(1048576 + 10) });
   assert.equal(res.status, 413);
@@ -245,7 +251,7 @@ test('attachments: uploads over the size limit are refused', async () => {
 
 test('page comments: thread, reply, only authors delete; pages can be moved without cycles', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const p1 = (await req('/s/ENG/pages', { method: 'POST', form: { title: 'Parent', body: 'x' } })).loc.split('/')[2];
   const p2 = (await req('/s/ENG/pages', { method: 'POST', form: { title: 'Child', body: 'y', parent_id: p1 } })).loc.split('/')[2];
@@ -281,7 +287,7 @@ test('github: link a repo, browse tabs, key links, development panel, errors', a
     return json({}, 404);
   };
   const { req, close } = await boot({ github: createGithub({ fetchFn }) });
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const id = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Signup' } })).loc.split('/')[2];
 
@@ -308,7 +314,7 @@ test('github: link a repo, browse tabs, key links, development panel, errors', a
 
 test('github: errors are shown, not thrown', async () => {
   const { req, close } = await boot({ github: createGithub({ fetchFn: async () => ({ ok: false, status: 403, json: async () => ({}) }) }) });
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   await req('/s/ENG/code/link', { method: 'POST', form: { repo: 'o/r' } });
   const res = await req('/s/ENG/code');
@@ -319,7 +325,7 @@ test('github: errors are shown, not thrown', async () => {
 
 test('issues: sub-tasks, links, history, JSON create, key auto-linking, panels', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const mk = async (title, extra = {}) => (await req('/s/ENG/issues', { method: 'POST', form: { title, ...extra } })).loc.split('/')[2];
   const parent = await mk('Parent story', { points: '5' });
@@ -367,7 +373,7 @@ test('issues: sub-tasks, links, history, JSON create, key auto-linking, panels',
 
 test('pages: templates, labels, stars, recently viewed, version diff', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   assert.match((await req('/s/ENG/create')).text, /Meeting notes/);
   const tpl = (await req('/s/ENG/new?template=meeting-notes')).text;
@@ -398,7 +404,7 @@ test('pages: templates, labels, stars, recently viewed, version diff', async () 
 
 test('board: swimlanes and the create dialog markup', async () => {
   const { req, close } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'ann', password: 'correct-horse-9' } });
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const id = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Lane test', assignee_id: '1', points: '2' } })).loc.split('/')[2];
   await req('/s/ENG/sprints', { method: 'POST', form: { name: 'S1' } });
@@ -407,7 +413,7 @@ test('board: swimlanes and the create dialog markup', async () => {
   await req(`/sprints/${sid}/start`, { method: 'POST', form: { weeks: '1' } });
   assert.doesNotMatch((await req('/s/ENG/board')).text, /class="lane"/);
   const lanes = (await req('/s/ENG/board?group=assignee')).text;
-  assert.match(lanes, /class="lane-head"[^>]*>[\s\S]*?a <span class="muted">\(1 issue\)/);
+  assert.match(lanes, /class="lane-head"[^>]*>[\s\S]*?ann <span class="muted">\(1 issue\)/);
   assert.match(lanes, /class="board-head"/);
   const page = (await req('/s/ENG/board')).text;
   assert.match(page, /id="create-issue"/); assert.match(page, /data-create="issue"/); assert.match(page, /id="shortcuts"/);
@@ -418,9 +424,9 @@ test('notifications: pages, issues, assignment, comments, mentions, prefs, watch
   const hooks = [];
   const { req, close, db } = await boot({ webhookUrl: 'https://hooks.example/x', publicUrl: 'https://folio.example', fetchFn: async (url, o) => { hooks.push({ url, body: JSON.parse(o.body) }); return { ok: true }; } });
   // admin tom + a second user sam (added directly, like the CLI would)
-  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'correct-horse-9' } });
   const { hashPassword } = await import('../src/auth.js');
-  db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('sam', hashPassword('longenough'));
+  db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('sam', await hashPassword('correct-horse-9'));
   const sam = db.prepare("SELECT id FROM users WHERE username = 'sam'").get().id;
   const notes = (uid) => db.prepare('SELECT kind, text, url, read_at FROM notifications WHERE user_id = ? ORDER BY id').all(uid);
   const tom = db.prepare("SELECT id FROM users WHERE username = 'tom'").get().id;
@@ -467,9 +473,9 @@ test('notifications: pages, issues, assignment, comments, mentions, prefs, watch
 
 test('notifications: tom sees his own inbox, marks read, follows links, saves prefs, toggles watch', async () => {
   const { req, close, db } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'correct-horse-9' } });
   const { hashPassword } = await import('../src/auth.js');
-  db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('sam', hashPassword('pw-longenough'));
+  db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('sam', await hashPassword('staple-battery-9'));
   await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
   const tom = db.prepare("SELECT id FROM users WHERE username = 'tom'").get().id, sam = db.prepare("SELECT id FROM users WHERE username = 'sam'").get().id;
   db.prepare("INSERT INTO notifications (user_id, kind, actor_id, ref, text, url) VALUES (?, 'mention', ?, 'x', 'sam mentioned you in <b>ENG-1</b>', '/s/ENG/board')").run(tom, sam);
@@ -499,7 +505,7 @@ test('notifications: tom sees his own inbox, marks read, follows links, saves pr
 
 test('learn: courses, lessons, progress, checklist, tour flag, hints, practice space', async () => {
   const { req, close, db } = await boot();
-  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } });
+  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'correct-horse-9' } });
   assert.match((await req('/')).text, /data-tour="1"/); // first login shows the tour
   assert.match((await req('/')).text, /Get started with Folio/);
   assert.equal((await req('/me/flag', { method: 'POST', form: { key: 'tour' } })).status, 200);

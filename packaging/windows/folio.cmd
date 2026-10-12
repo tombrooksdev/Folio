@@ -26,7 +26,17 @@ if /i "%CMD%"=="start"    goto :start
 if /i "%CMD%"=="stop"     goto :stop
 if /i "%CMD%"=="open"     goto :open
 if /i "%CMD%"=="add-user" goto :adduser
-if /i "%CMD%"=="backup"   goto :backup
+if /i "%CMD%"=="reset-password" goto :resetpw
+if /i "%CMD%"=="backup"   goto 
+:resetpw
+if "%~2"=="" (
+  echo Usage: folio reset-password NAME
+  exit /b 1
+)
+"%NODE%" --disable-warning=ExperimentalWarning "%ROOT%\app\scripts\reset-password.js" "%~2"
+exit /b %errorlevel%
+
+:backup
 if /i "%CMD%"=="config"   goto :config
 goto :usage
 
@@ -54,7 +64,7 @@ if "%~2"=="" (
   echo Usage: folio add-user NAME
   exit /b 1
 )
-"%NODE%" --disable-warning=ExperimentalWarning "%ROOT%\app\scripts\add-user.js" "%~2"
+"%NODE%" --disable-warning=ExperimentalWarning "%ROOT%\app\scripts\add-user.js" %2 %3 %4
 exit /b %errorlevel%
 
 :backup
@@ -79,7 +89,8 @@ echo.
 echo   start             Run the server in this window
 echo   stop              Stop a running server
 echo   open              Open Folio in your browser
-echo   add-user NAME     Create a user (asks for a password)
+echo   add-user NAME [--role admin^|member^|viewer]   Create a user (asks for a password)
+echo   reset-password NAME   Set a new password and sign that user out everywhere
 echo   backup [FILE]     Back up the database and attachments
 echo   config            Show where things live
 exit /b 0

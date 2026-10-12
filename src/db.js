@@ -1,16 +1,23 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export function openDb(file) {
-  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+  if (file !== ':memory:') {
+    // Private by default: the database holds password hashes and every page. SQLite gives the -wal/-shm files the same mode.
+    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+    writeFileSync(file, '', { flag: 'a', mode: 0o600 });
+    try { chmodSync(file, 0o600); } catch { /* not the owner (e.g. a mounted volume): leave it */ }
+  }
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  if (file !== ':memory:') for (const ext of ['-wal', '-shm']) try { chmodSync(file + ext, 0o600); } catch { /* not there yet, or not ours */ }
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS sessions (
@@ -20,7 +27,7 @@ export function openDb(file) {
     );
     CREATE TABLE IF NOT EXISTS spaces (
       id INTEGER PRIMARY KEY,
-      key TEXT NOT NULL UNIQUE,
+      key TEXT NOT NULL UNIQUE CHECK (key NOT GLOB '*[^A-Z0-9-]*'),
       name TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -214,6 +221,10 @@ export function openDb(file) {
   `);
   // Columns added after v0.4: older databases are upgraded in place.
   addColumn(db, 'issues', 'epic_id', 'INTEGER REFERENCES epics(id) ON DELETE SET NULL');
+  addColumn(db, 'users', 'role', "TEXT NOT NULL DEFAULT 'member'");
+  // Databases from before roles existed: the first user becomes the administrator.
+  if (!db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get()) db.exec("UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users)");
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_username_nocase ON users (username COLLATE NOCASE)'); } catch { /* existing look-alike accounts: keep working, the app also checks case-insensitively */ }
   addColumn(db, 'issues', 'parent_id', 'INTEGER REFERENCES issues(id) ON DELETE SET NULL');
   addColumn(db, 'spaces', 'github_repo', 'TEXT');
   // Sprints that were started before burndown tracking existed get a starting snapshot from their current issues.

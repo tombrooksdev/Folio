@@ -1,6 +1,6 @@
 {
   "name": "folio",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Self-hosted wiki: spaces, nested pages, Markdown, search, version history.",
   "type": "module",
   "private": true,
@@ -13,7 +13,8 @@
     "test": "node --test",
     "add-user": "node scripts/add-user.js",
     "backup": "node scripts/backup.js",
-    "package": "bash packaging/build.sh"
+    "package": "bash packaging/build.sh",
+    "reset-password": "node scripts/reset-password.js"
   },
   "dependencies": {
     "express": "^4.21.0",

@@ -13,6 +13,8 @@ ExecStart=/opt/folio/bin/folio start
 Restart=on-failure
 RestartSec=3
 StateDirectory=folio
+StateDirectoryMode=0700
+UMask=0077
 WorkingDirectory=/var/lib/folio
 # Hardening: Folio only needs to write to its own data folder.
 NoNewPrivileges=true

@@ -38,6 +38,10 @@ case "${1:-start}" in
     shift; as_service_user add-user "$@"
     exec "$NODE" $NODE_OPTS "$APP/scripts/add-user.js" "$@"
     ;;
+  reset-password)
+    shift; as_service_user reset-password "$@"
+    exec "$NODE" $NODE_OPTS "$APP/scripts/reset-password.js" "$@"
+    ;;
   backup)
     shift; as_service_user backup "$@"
     exec "$NODE" $NODE_OPTS "$APP/scripts/backup.js" "$@"
@@ -60,7 +64,9 @@ Folio: self-hosted wiki and Scrum board
 Usage: folio <command>
 
   start               Run the server in the foreground (the service does this for you)
-  add-user <name>     Create a user (asks for a password)
+  add-user <name> [--role admin|member|viewer]
+                      Create a user (asks for a password)
+  reset-password <name>  Set a new password and sign that user out everywhere
   backup [file]       Back up the database and attachments
   config              Show where things live
   version             Print the version

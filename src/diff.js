@@ -3,7 +3,7 @@ import { esc } from './render.js';
 
 export function diffLines(a, b) {
   const x = a.split('\n'), y = b.split('\n');
-  if (x.length * y.length > 4e6) return [...x.map((t) => ({ t: 'del', s: t })), ...y.map((t) => ({ t: 'add', s: t }))]; // too big: show as replaced
+  if (x.length * y.length > 1e6) return [...x.map((t) => ({ t: 'del', s: t })), ...y.map((t) => ({ t: 'add', s: t }))]; // too big: show as replaced
   const n = x.length, m = y.length;
   const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = x[i] === y[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);

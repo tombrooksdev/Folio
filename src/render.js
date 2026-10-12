@@ -3,10 +3,14 @@ import sanitizeHtml from 'sanitize-html';
 
 marked.setOptions({ gfm: true, breaks: false });
 
+let allowRemoteImages = false;
+export const setAllowRemoteImages = (v) => { allowRemoteImages = !!v; };
+const isRemote = (src = '') => /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(src.trim()) || /^https?:/i.test(src.trim());
+
 const allowed = {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'del', 'input', 'details', 'summary']),
   allowedAttributes: {
-    a: ['href', 'title'],
+    a: ['href', 'title', 'target', 'rel'],
     img: ['src', 'alt', 'title'],
     input: ['type', 'checked', 'disabled'],
     code: ['class'],
@@ -15,6 +19,16 @@ const allowed = {
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   allowedSchemesByTag: { img: ['http', 'https'] },
+  allowProtocolRelative: false,
+  transformTags: {
+    // external links open safely; task-list checkboxes are always read-only
+    a: (tag, attribs) => (/^https?:/i.test(attribs.href ?? '') ? { tagName: 'a', attribs: { ...attribs, target: '_blank', rel: 'noopener noreferrer nofollow' } } : { tagName: 'a', attribs }),
+    input: (tag, attribs) => ({ tagName: 'input', attribs: { ...attribs, disabled: 'disabled' } }),
+  },
+  // only checkboxes may stay (no fake password boxes), and remote images are dropped unless the admin allowed them
+  exclusiveFilter: (frame) =>
+    (frame.tag === 'input' && frame.attribs.type !== 'checkbox') ||
+    (frame.tag === 'img' && (!frame.attribs.src || (!allowRemoteImages && isRemote(frame.attribs.src)))),
 };
 
 // Set by the app so "ENG-12" in text can become a link to the issue (returns the issue id, or null).
@@ -111,7 +125,7 @@ const PATHS = {
 };
 export const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${PATHS[name]}"/></svg>`;
 
-export function layout({ title, user, body, sidebar = '', toc = false, bare = false, spaces = [], people = [], spaceKey = '', editUrl = '', unread = 0, tour = false }) {
+export function layout({ title, user, body, sidebar = '', toc = false, bare = false, spaces = [], people = [], spaceKey = '', editUrl = '', unread = 0, tour = false, canWrite = true }) {
   const initial = user ? esc(user.username.slice(0, 1).toUpperCase()) : '';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -127,12 +141,12 @@ ${bare ? body : `<header class="top">
   ${
     user
       ? `<button class="icon-btn" type="button" id="side-toggle" aria-label="Toggle sidebar">${icon('sidebar')}</button>
-         <div class="create-wrap"><button class="create-btn" type="button" id="create-btn" aria-haspopup="true" aria-expanded="false">${icon('plus')}Create</button>
+         ${canWrite ? `<div class="create-wrap"><button class="create-btn" type="button" id="create-btn" aria-haspopup="true" aria-expanded="false">${icon('plus')}Create</button>
            <div class="create-menu" id="create-menu" role="menu">
              <button type="button" role="menuitem" data-create="issue">${icon('task')}<span>Issue<small>Story, bug or task</small></span><kbd>C</kbd></button>
              <a role="menuitem" href="${spaces.length ? `/s/${esc(spaceKey || spaces[0].key)}/create` : '/#new-space'}">${icon('file')}<span>Page<small>From a template or blank</small></span></a>
              <a role="menuitem" href="/#new-space">${icon('board')}<span>Space<small>A home for a team or project</small></span></a>
-           </div></div>
+           </div></div>` : ''}
          <button class="cmdk-btn ghost" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search pages</span><kbd>Ctrl K</kbd></button>
          <div class="bell-wrap"><button class="icon-btn" type="button" id="bell" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">${icon('bell')}<span class="badge" id="bell-count"${unread ? '' : ' hidden'}>${unread > 99 ? '99+' : unread}</span></button><div class="bell-menu" id="bell-menu"></div></div>
          <div class="help-wrap"><button class="icon-btn" type="button" id="help-btn" aria-label="Help" aria-haspopup="true" aria-expanded="false">${icon('help')}</button>
@@ -143,7 +157,7 @@ ${bare ? body : `<header class="top">
              <a role="menuitem" href="/changelog">${icon('file')}What's new</a>
            </div></div>
          <div class="theme-wrap"><button class="icon-btn" type="button" id="theme" aria-label="Choose theme" aria-haspopup="true" aria-expanded="false">${icon('palette')}</button><div class="theme-menu" id="theme-menu" role="menu"></div></div>
-         <span class="avatar" title="${esc(user.username)}">${initial}</span>
+         <a class="avatar" href="/account" title="${esc(user.username)}: account and password">${initial}</a>
          <form method="post" action="/logout"><button class="ghost sm">Sign out</button></form>`
       : '<span class="spacer"></span>'
   }
@@ -153,7 +167,7 @@ ${bare ? body : `<header class="top">
   <main>${body}</main>
   ${sidebar && toc ? '<aside class="toc" id="toc" aria-label="On this page"></aside>' : ''}
 </div>`}
-${user && !bare ? createDialogs({ spaces, people, spaceKey }) : ''}
+${user && !bare ? createDialogs({ spaces, people, spaceKey, canWrite }) : ''}
 <div class="cmdk" id="cmdk" role="dialog" aria-modal="true" aria-label="Search">
   <div class="cmdk-box"><input id="cmdk-input" placeholder="Search every page..." autocomplete="off"><div class="cmdk-list" id="cmdk-list"></div></div>
 </div>
@@ -162,9 +176,9 @@ ${user && !bare ? '<script src="/tour.js"></script>' : ''}
 </body></html>`;
 }
 
-function createDialogs({ spaces, people, spaceKey }) {
+function createDialogs({ spaces, people, spaceKey, canWrite = true }) {
   const keys = [['C', 'Create an issue'], ['/', 'Search'], ['E', 'Edit this page or issue'], ['G then H', 'Go to home'], ['G then B', 'Go to the board'], ['G then L', 'Go to the backlog'], ['G then I', 'Go to issue search'], ['[', 'Show or hide the sidebar'], ['?', 'Show this help']];
-  return `<dialog class="modal" id="create-issue" aria-labelledby="ci-title">
+  return `${canWrite ? `<dialog class="modal" id="create-issue" aria-labelledby="ci-title">
   <form method="dialog" class="modal-head"><h2 id="ci-title">Create issue</h2><button class="icon-btn" aria-label="Close">${icon('plus')}</button></form>
   <form id="create-issue-form" class="modal-body">
     <label>Space<select name="space" required>${spaces.map((s) => `<option value="${esc(s.key)}"${s.key === spaceKey ? ' selected' : ''}>${esc(s.name)} (${esc(s.key)})</option>`).join('')}</select></label>
@@ -175,7 +189,7 @@ function createDialogs({ spaces, people, spaceKey }) {
       <label>Assignee<select name="assignee_id"><option value="">Unassigned</option>${people.map((u) => `<option value="${u.id}">${esc(u.username)}</option>`).join('')}</select></label></div>
     <p class="err" id="ci-error" role="alert" hidden></p>
     <div class="modal-foot"><label class="check"><input type="checkbox" id="ci-another"> Create another</label><span class="spacer"></span><button type="button" class="ghost" data-close>Cancel</button><button>Create</button></div>
-  </form></dialog>
+  </form></dialog>` : ''}
 <dialog class="modal" id="shortcuts" aria-labelledby="sc-title"><form method="dialog" class="modal-head"><h2 id="sc-title">Keyboard shortcuts</h2><button class="icon-btn" aria-label="Close">${icon('plus')}</button></form>
   <div class="modal-body"><dl class="keys">${keys.map(([k, d]) => `<dt>${k.split(' then ').map((x) => `<kbd>${x}</kbd>`).join(' then ')}</dt><dd>${d}</dd>`).join('')}</dl></div></dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>`;

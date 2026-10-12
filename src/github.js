@@ -1,20 +1,35 @@
 // Read-only GitHub integration: link a repo to a space, browse commits / pull requests / branches / README,
 // and show activity that mentions an issue key (e.g. ENG-12) on the issue itself.
 import { esc, icon, renderMarkdown } from './render.js';
+import { str, wrap } from './util.js';
 
-const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
+// GitHub owner names: letters, digits and single hyphens, never starting with a dot. Repo names may contain dots but are never "." or "..".
+const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+const NAME = /^(?!\.{1,2}$)[A-Za-z0-9_.-]{1,100}$/;
+export function validRepo(repo) {
+  if (typeof repo !== 'string') return false;
+  const [owner, name, ...rest] = repo.split('/');
+  return !rest.length && OWNER.test(owner ?? '') && NAME.test(name ?? '');
+}
+const API = 'https://api.github.com';
+
+// Errors whose text is safe to show to people; anything else is reported generically.
+const publicError = (message) => Object.assign(new Error(message), { public: true });
 
 export function createGithub({ token = '', fetchFn = globalThis.fetch, ttlMs = 5 * 60e3 } = {}) {
   const cache = new Map();
   async function get(path) {
     const hit = cache.get(path);
     if (hit && Date.now() - hit.at < ttlMs) return hit.data;
-    const res = await fetchFn(`https://api.github.com${path}`, {
+    // Whatever we are asked for, only /repos/... on api.github.com may be fetched (the token is attached to these requests).
+    const url = new URL(path, API);
+    if (url.origin !== API || !url.pathname.startsWith('/repos/') || url.pathname.includes('/../')) throw publicError('Refused to contact an unexpected GitHub address');
+    const res = await fetchFn(url.href, {
       headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'folio-wiki', 'X-GitHub-Api-Version': '2022-11-28', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
-      const err = new Error(res.status === 404 ? 'Repository not found (is it private? set FOLIO_GITHUB_TOKEN)' : res.status === 403 || res.status === 429 ? 'GitHub rate limit reached. Set FOLIO_GITHUB_TOKEN to raise it.' : `GitHub returned ${res.status}`);
+      const err = publicError(res.status === 404 ? 'Repository not found (is it private? set FOLIO_GITHUB_TOKEN)' : res.status === 403 || res.status === 429 ? 'GitHub rate limit reached. Set FOLIO_GITHUB_TOKEN to raise it.' : `GitHub returned ${res.status}`);
       err.status = res.status;
       throw err;
     }
@@ -23,7 +38,7 @@ export function createGithub({ token = '', fetchFn = globalThis.fetch, ttlMs = 5
     return data;
   }
   return {
-    valid: (r) => REPO.test(r),
+    valid: validRepo,
     repo: (r) => get(`/repos/${r}`),
     commits: (r) => get(`/repos/${r}/commits?per_page=50`),
     pulls: (r) => get(`/repos/${r}/pulls?state=all&sort=updated&direction=desc&per_page=40`),
@@ -53,7 +68,7 @@ export function mountGithub(app, { db, page, getSpace, github }) {
 
   const prState = (p) => (p.merged_at ? ['merged', 'Merged'] : p.state === 'open' ? ['open', p.draft ? 'Draft' : 'Open'] : ['closed', 'Closed']);
 
-  app.get('/s/:key/code', async (req, res) => {
+  app.get('/s/:key/code', wrap(async (req, res) => {
     const space = getSpace(req.params.key);
     if (!space) return res.status(404).send('No such space');
     const head = `<div class="jira"><nav class="crumbs"><a href="/">Spaces</a>${icon('chevron')}<a href="/s/${esc(space.key)}">${esc(space.name)}</a>${icon('chevron')}Code</nav>`;
@@ -64,6 +79,7 @@ export function mountGithub(app, { db, page, getSpace, github }) {
         <form class="new-space center" method="post" action="/s/${esc(space.key)}/code/link"><input name="repo" placeholder="owner/repository, e.g. tombrooksdev/Folio" aria-label="Repository" required pattern="[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+"><button>Link repository</button></form>
         <p class="muted">Public repositories work out of the box. For private repositories or higher rate limits, set <code>FOLIO_GITHUB_TOKEN</code> on the server.</p></div>`);
     const r = space.github_repo;
+    if (!github.valid(r)) return done(`<h1 class="page-title">Code</h1><div class="err" role="alert">The linked repository name is not valid.</div><form method="post" action="/s/${esc(space.key)}/code/unlink" class="actions"><button class="ghost">Unlink repository</button></form>`, 400);
     const tab = ['commits', 'pulls', 'branches', 'readme'].includes(req.query.tab) ? req.query.tab : 'commits';
     try {
       const info = await github.repo(r);
@@ -88,15 +104,16 @@ export function mountGithub(app, { db, page, getSpace, github }) {
           <form method="post" action="/s/${esc(space.key)}/code/unlink" data-confirm="Unlink this repository?"><button class="ghost">Unlink</button></form></div></div>
         <div class="tabs">${tabs(space, tab)}</div>${list}`);
     } catch (e) {
-      done(`<h1 class="page-title">${esc(r)}</h1><div class="err" role="alert">${esc(e.message)}</div>
+      if (!e.public) console.error('GitHub view failed:', e);
+      done(`<h1 class="page-title">${esc(r)}</h1><div class="err" role="alert">${esc(e.public ? e.message : 'Could not load this repository from GitHub right now.')}</div>
         <form method="post" action="/s/${esc(space.key)}/code/unlink" class="actions"><button class="ghost">Unlink repository</button></form>`, 502);
     }
-  });
+  }));
 
   app.post('/s/:key/code/link', (req, res) => {
     const space = getSpace(req.params.key);
     if (!space) return res.status(404).send('No such space');
-    const repo = String(req.body.repo ?? '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '');
+    const repo = str(req.body.repo, 200).replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '');
     if (!github.valid(repo)) return res.status(400).send('Use the form owner/repository');
     db.prepare('UPDATE spaces SET github_repo = ? WHERE id = ?').run(repo, space.id);
     res.redirect(`/s/${space.key}/code`);
@@ -109,10 +126,10 @@ export function mountGithub(app, { db, page, getSpace, github }) {
   });
 
   // "Development" panel on an issue: commits and PRs whose text mentions the issue key. Loaded lazily by the page.
-  app.get('/i/:id/dev', async (req, res) => {
+  app.get('/i/:id/dev', wrap(async (req, res) => {
     const i = db.prepare('SELECT * FROM issues WHERE id = ?').get(Number(req.params.id));
     const space = i && db.prepare('SELECT * FROM spaces WHERE id = ?').get(i.space_id);
-    if (!i || !space?.github_repo) return res.status(404).send('');
+    if (!i || !space?.github_repo || !github.valid(space.github_repo)) return res.status(404).send('');
     const key = new RegExp(`\\b${space.key}-${i.num}\\b`);
     try {
       const [pulls, commits] = await Promise.all([github.pulls(space.github_repo), github.commits(space.github_repo)]);
@@ -123,7 +140,8 @@ export function mountGithub(app, { db, page, getSpace, github }) {
         ${cs.map((c) => `<div class="dev-row">${icon('branch')}<a ${ext(c.html_url)}>${esc(c.commit.message.split('\n')[0])}</a><code>${esc(c.sha.slice(0, 7))}</code></div>`).join('')}
         ${prs.length || cs.length ? '' : `<p class="muted">No pull requests or commits mention ${esc(space.key)}-${i.num} yet. Put the key in a commit message, PR title or branch name.</p>`}</div>`);
     } catch (e) {
-      res.type('html').send(`<h3>Development</h3><p class="muted pad">${esc(e.message)}</p>`);
+      if (!e.public) console.error('GitHub development panel failed:', e);
+      res.type('html').send(`<h3>Development</h3><p class="muted pad">${esc(e.public ? e.message : 'Could not load GitHub activity.')}</p>`);
     }
-  });
+  }));
 }

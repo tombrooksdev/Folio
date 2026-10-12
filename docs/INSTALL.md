@@ -46,7 +46,8 @@ Windows SmartScreen may warn about an unrecognised publisher because the install
 **Command line** (Command Prompt in `C:\Program Files\Folio`):
 
 ```
-folio.cmd add-user alice     add another person
+folio.cmd add-user alice     add another person (add --role viewer for read-only)
+folio.cmd reset-password alice   set a new password and sign them out
 folio.cmd backup             back up the database and attachments
 folio.cmd config             show where everything is
 folio.cmd stop               stop the server
@@ -81,7 +82,8 @@ That's it. The package creates a `folio` system user, starts a systemd service a
 | Logs | `journalctl -u folio -f` |
 
 ```bash
-sudo folio add-user alice       # add another person
+sudo folio add-user alice       # add another person (--role admin|member|viewer)
+sudo folio reset-password alice # new password, signs them out everywhere
 sudo folio backup               # back up the database and attachments
 folio config                    # show where everything is
 sudo systemctl status folio
@@ -121,6 +123,8 @@ Data is in `./data`. See the README for HTTPS and configuration.
 | `PORT` | `3000` | |
 | `FOLIO_HOST` | `0.0.0.0` on Linux and Docker, `127.0.0.1` on Windows | `127.0.0.1` accepts connections from this computer only |
 | `FOLIO_MAX_UPLOAD_MB` | `25` | Largest attachment |
+| `FOLIO_SETUP_TOKEN`, `FOLIO_DISABLE_SETUP` | none | Protect or disable the first-run setup page |
+| `FOLIO_MAX_STORAGE_MB` | `2048` | Total attachment storage |
 | `FOLIO_GITHUB_TOKEN` | none | For private repos or a higher GitHub rate limit |
 | `FOLIO_WEBHOOK_URL`, `FOLIO_PUBLIC_URL` | none | Post team events to Slack, Teams, Discord or Mattermost |
 | `FOLIO_SECURE_COOKIES`, `FOLIO_TRUST_PROXY` | `0` | Set both to `1` behind an HTTPS reverse proxy |

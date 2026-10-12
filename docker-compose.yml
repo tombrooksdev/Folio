@@ -3,19 +3,30 @@ services:
     build: .
     image: folio:latest
     restart: unless-stopped
-    ports: ["3000:3000"]
-    volumes: ["./data:/data"]
+    # Bound to this machine only. To reach Folio from elsewhere, put an HTTPS reverse proxy (Caddy, nginx, Traefik)
+    # in front of it and let that listen publicly. Only change this to "3000:3000" on a network you trust.
+    ports: ["127.0.0.1:3000:3000"]
+    volumes: ["./data:/data"]   # owned by uid 1000 (the "node" user inside the container)
     environment:
-      # Set both to "1" when serving over HTTPS behind a reverse proxy (Caddy, nginx, Traefik, Plesk).
-      FOLIO_SECURE_COOKIES: "0"
-      FOLIO_TRUST_PROXY: "0"
-      # Optional: lets the GitHub integration read private repos and avoids the 60 requests/hour anonymous limit.
-      # FOLIO_GITHUB_TOKEN: ""
+      NODE_ENV: production      # secure cookies by default (plain-HTTP localhost still works), no debug output
+      # Behind an HTTPS reverse proxy that sets X-Forwarded-For/-Proto, also set:
+      # FOLIO_TRUST_PROXY: "1"
+      # Plain HTTP on a trusted network (not localhost)? Browsers refuse Secure cookies there, so opt out:
+      # FOLIO_SECURE_COOKIES: "0"
+      # Require this token on the first-run setup page, or turn the page off and use "folio add-user":
+      # FOLIO_SETUP_TOKEN: "choose-a-long-random-string"
+      # FOLIO_DISABLE_SETUP: "1"
       # Optional: post new pages, new issues and sprint events to Slack / Teams / Discord / Mattermost.
       # FOLIO_WEBHOOK_URL: ""
+      # The address people use to reach Folio (webhook links, and the CSRF check behind a proxy).
       # FOLIO_PUBLIC_URL: "https://wiki.example.com"
-      # Largest attachment, in megabytes.
+      # Optional: lets the GitHub integration read private repos and avoids the 60 requests/hour anonymous limit.
+      # FOLIO_GITHUB_TOKEN: ""
+      # Largest attachment, and total attachment storage, in megabytes.
       # FOLIO_MAX_UPLOAD_MB: "25"
+      # FOLIO_MAX_STORAGE_MB: "2048"
+      # Allow https:// images from other sites in pages (off by default: they reveal who views a page).
+      # FOLIO_ALLOW_REMOTE_IMAGES: "1"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s

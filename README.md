@@ -146,11 +146,13 @@ No separate Node.js install is needed for the installers. Full guide, including 
 
 ```bash
 git clone https://github.com/tombrooksdev/Folio.git
-cd folio
+cd Folio
 docker compose up -d --build
 ```
 
-Open <http://localhost:3000>. The first visit asks you to create the administrator account.
+Open <http://localhost:3000>. The first visit asks you to create the administrator account. Do that straight away, or set `FOLIO_SETUP_TOKEN` first (see [Security](#security)).
+
+The Compose file publishes Folio on this machine only (`127.0.0.1`). To reach it from other devices, put an HTTPS reverse proxy in front of it (see [Deploying](#deploying)).
 
 Your data lives in `./data/folio.db`, which is mounted into the container, so it survives rebuilds and upgrades. The container restarts automatically after a reboot.
 
@@ -173,17 +175,23 @@ Folio is configured with environment variables.
 |---|---|---|
 | `PORT` | `3000` | Port to listen on. |
 | `FOLIO_DB` | `./data/folio.db` (`/data/folio.db` in Docker) | Path to the SQLite database. |
-| `FOLIO_SECURE_COOKIES` | `0` | Set to `1` when served over HTTPS so cookies are marked `Secure`. |
+| `NODE_ENV` | `production` in Docker | In production, cookies are `Secure` by default (plain-HTTP `localhost` still works). |
+| `FOLIO_SECURE_COOKIES` | on in production, otherwise off | `1` forces `Secure` cookies; `0` allows plain HTTP on a trusted network. |
+| `FOLIO_SETUP_TOKEN` | *(none)* | If set, the first-run setup page asks for this token. |
+| `FOLIO_DISABLE_SETUP` | `0` | `1` turns the web setup page off; create the first user with `folio add-user`. |
+| `FOLIO_HOST` | `0.0.0.0` | Address to listen on (`127.0.0.1` = this machine only). |
 | `FOLIO_TRUST_PROXY` | `0` | Set to `1` when behind a reverse proxy so the real client IP is used for login throttling. |
 | `FOLIO_UPLOAD_DIR` | `./data/uploads` (`/data/uploads` in Docker) | Where attachments are stored. |
 | `FOLIO_MAX_UPLOAD_MB` | `25` | Largest attachment, in megabytes. |
+| `FOLIO_MAX_STORAGE_MB` | `2048` | Total attachment storage cap. |
+| `FOLIO_ALLOW_REMOTE_IMAGES` | `0` | `1` allows `https://` images from other sites in pages (they reveal who views a page). |
 | `FOLIO_WEBHOOK_URL` | *(none)* | Optional Slack / Mattermost / Discord / Teams incoming-webhook URL. New pages, new issues and sprint events are posted there. |
-| `FOLIO_PUBLIC_URL` | *(none)* | The address people use to reach Folio (for example `https://wiki.example.com`), so webhook messages include links. |
+| `FOLIO_PUBLIC_URL` | *(none)* | The address people use to reach Folio (for example `https://wiki.example.com`): webhook messages link to it, and the cross-site check accepts it. |
 | `FOLIO_GITHUB_TOKEN` | *(none)* | Optional GitHub token. Public repos work without one; add it for private repos or to lift the 60 requests/hour limit. A fine-grained, read-only token is enough. |
 
 ## Deploying
 
-Run Folio behind a reverse proxy that terminates HTTPS, then set `FOLIO_SECURE_COOKIES=1` and `FOLIO_TRUST_PROXY=1`.
+Run Folio behind a reverse proxy that terminates HTTPS, then set `FOLIO_TRUST_PROXY=1` (and `FOLIO_SECURE_COOKIES=1` if `NODE_ENV` is not `production`). Only enable `FOLIO_TRUST_PROXY` behind a proxy that overwrites `X-Forwarded-For`, otherwise people could fake their address to dodge the login limit.
 
 **Caddy** (automatic HTTPS):
 
@@ -211,17 +219,26 @@ server {
 
 ## Managing users
 
-The first account is created in the browser. To add more people:
+The first account is created in the browser and is an **administrator**. Everyone else is added by an administrator, either on the **People** page (avatar menu, *Account*, *Manage people*) or from the command line:
 
 ```bash
 # Docker
-docker compose exec folio node scripts/add-user.js alice
+docker compose exec folio node scripts/add-user.js alice --role member
 
 # Node
-npm run add-user -- alice
+npm run add-user -- alice --role member
+npm run reset-password -- alice      # new password, and signs them out everywhere
 ```
 
-You will be prompted for a password (or set `FOLIO_PASSWORD`). All users currently have equal access to every space.
+You are asked for the password (input hidden); it must be at least 10 characters.
+
+| Role | Can |
+|---|---|
+| **Viewer** | Read everything. Change nothing (except their own notification settings and account). |
+| **Member** | Create and edit pages, issues, sprints and epics; comment; delete their own uploads and comments. |
+| **Administrator** | Everything a member can, plus manage people and roles, link GitHub repositories, and delete anyone's attachments or comments. |
+
+Anyone can change their own password and sign out other sessions from **Account**.
 
 ## Backup and restore
 
@@ -299,7 +316,8 @@ src/
   templates.js  built-in page templates
   diff.js       line diff for comparing versions
   db.js         schema, migrations, search index
-  auth.js       scrypt passwords, sessions, login throttle
+  auth.js       scrypt passwords, sessions, roles, password and username rules
+  util.js       safe request-field helpers, async wrapper, rate limiter
   render.js     Markdown to sanitised HTML, layout, icons
 public/         CSS (themes live here), client JavaScript, bundled fonts
 scripts/        add-user and backup
@@ -319,16 +337,20 @@ Themes are sets of CSS variables.
 
 ## Security
 
-- Passwords are hashed with scrypt; session tokens are random and stored only as SHA-256 hashes.
-- Cookies are `HttpOnly` and `SameSite=Lax` (add `Secure` with `FOLIO_SECURE_COOKIES=1`).
-- State-changing requests from a different origin are rejected.
-- A strict Content Security Policy blocks inline scripts and styles.
-- Markdown is sanitised, so pasted HTML cannot run scripts.
-- Attachments are size-limited and renamed on disk. Only images and PDFs display inline; everything else (including HTML and SVG) downloads, with `nosniff` and a locked-down CSP.
-- The GitHub integration is read-only and only contacts `api.github.com`.
-- Login attempts are throttled per IP.
+Folio was audited and hardened in v0.9.0. In short:
 
-Not included yet: two-factor auth, per-space permissions and audit logs. Please report vulnerabilities privately rather than in a public issue.
+- **Accounts:** scrypt password hashing (10+ characters, common passwords refused), per-address and per-username login limits, constant-time handling of unknown users, rotating sessions, a hard limit on password length, and **Account** pages to change your password and revoke sessions.
+- **Roles:** administrator, member and read-only viewer (see [Managing users](#managing-users)).
+- **First run:** the setup page can be protected with `FOLIO_SETUP_TOKEN` or turned off with `FOLIO_DISABLE_SETUP=1`, and only one request can ever create the first administrator.
+- **Transport:** `Secure` cookies with the `__Host-` prefix and HSTS in production; the Docker Compose file listens on this machine only.
+- **Browser protections:** a strict Content Security Policy (no inline script or style, no remote images by default), `nosniff`, framing and permissions headers, `Cache-Control: no-store` on signed-in pages, and cross-site request checks (`Sec-Fetch-Site`, `Origin`).
+- **Content:** Markdown is sanitised: no scripts, no form fields except read-only task checkboxes, no tracking images, and external links open with `noopener noreferrer nofollow`.
+- **Uploads:** streamed to disk with size and storage limits, randomly named, checked against their extension, and only images and PDFs display inline. Abandoned uploads are purged after a day.
+- **Data at rest:** the database, attachments and backups are readable by their owner only.
+- **GitHub:** read-only, and restricted to `/repos/...` on `api.github.com`.
+- **Errors:** never show stack traces or file paths.
+
+Not included yet: two-factor sign-in, per-space permissions, and soft-delete for pages. See [SECURITY.md](SECURITY.md) for how to report a vulnerability privately and how to run Folio safely.
 
 ## Changelog
 

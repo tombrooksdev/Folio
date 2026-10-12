@@ -2,9 +2,11 @@
 title: Add people
 minutes: 2
 ---
-The first account you create is the administrator. Everyone else is added from the command line, so there is no sign-up page to secure.
+The first account you create is the administrator. Everyone else is added by an administrator, so there is no public sign-up page to secure.
 
 ## Add someone
+
+Open your avatar menu, choose **Account**, then **Manage people** and fill in **Add a person**. Or use the command line:
 
 | How you installed it | Command |
 |---|---|
@@ -12,12 +14,21 @@ The first account you create is the administrator. Everyone else is added from t
 | Linux package | `sudo folio add-user alice` |
 | Docker | `docker compose exec folio node scripts/add-user.js alice` |
 
-You are asked for a password. Share it, and ask them to keep it private.
+Add `--role viewer` or `--role admin` to choose a role. Passwords must be at least 10 characters.
 
-## Good to know
+## Roles
 
-- All users can see and edit every space. Folio deliberately has no permission schemes.
-- Passwords are stored hashed, sessions are random tokens, and failed logins are throttled.
+| Role | Can |
+|---|---|
+| **Viewer** | Read everything, change nothing |
+| **Member** | Create and edit pages, issues, sprints and epics |
+| **Administrator** | Also manage people and link GitHub repositories |
+
+Give people the lowest role that works. There is no per-space permission scheme, on purpose.
+
+## Forgotten password?
+
+Run `folio reset-password alice`. It sets a new password and signs that person out everywhere. People can change their own password, and sign out other sessions, from **Account**.
 
 > [!INFO]
 > New people see the **first-login tour** automatically the first time they sign in.

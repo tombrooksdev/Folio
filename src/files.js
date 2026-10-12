@@ -1,7 +1,9 @@
 // File attachments for pages and issues. Files live on disk (data/uploads), metadata in SQLite.
 // Uploads are sent as a raw request body (no multipart parser needed): POST /attachments?space=KEY&page=ID&name=file.png
-import express from 'express';
-import { mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, createWriteStream, openSync, readSync, closeSync, chmodSync, readdirSync } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { Transform } from 'node:stream';
+import { wrap } from './util.js';
 import { randomUUID } from 'node:crypto';
 import { basename, extname, resolve, join } from 'node:path';
 import { esc, icon } from './render.js';
@@ -19,9 +21,26 @@ const INLINE = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'i
 const isImage = (mime) => mime.startsWith('image/') && INLINE.has(mime);
 const size = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
-export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576 }) {
+// The first bytes of an image or PDF must match its extension, so a renamed HTML file can never be served inline.
+const startsWith = (b, sig, at = 0) => sig.every((x, i) => b[at + i] === x);
+const SNIFF = {
+  '.png': (b) => startsWith(b, [0x89, 0x50, 0x4e, 0x47]),
+  '.jpg': (b) => startsWith(b, [0xff, 0xd8, 0xff]), '.jpeg': (b) => startsWith(b, [0xff, 0xd8, 0xff]),
+  '.gif': (b) => startsWith(b, [0x47, 0x49, 0x46, 0x38]),
+  '.webp': (b) => startsWith(b, [0x52, 0x49, 0x46, 0x46]) && startsWith(b, [0x57, 0x45, 0x42, 0x50], 8),
+  '.avif': (b) => startsWith(b, [0x66, 0x74, 0x79, 0x70], 4),
+  '.pdf': (b) => startsWith(b, [0x25, 0x50, 0x44, 0x46]),
+};
+function head(path, n = 16) {
+  const fd = openSync(path, 'r');
+  try { const b = Buffer.alloc(n); const got = readSync(fd, b, 0, n, 0); return b.subarray(0, got); } finally { closeSync(fd); }
+}
+
+export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576, maxStorageBytes = 2048 * 1048576 }) {
   const root = resolve(uploadDir);
-  mkdirSync(root, { recursive: true });
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  // Tighten anything created by an older version (best effort; only touches our own uploads folder).
+  try { chmodSync(root, 0o700); for (const name of readdirSync(root)) chmodSync(join(root, name), 0o600); } catch { /* not the owner */ }
   const urlFor = (a) => `/files/${a.id}/${encodeURIComponent(a.filename)}`;
 
   function remove(rows) {
@@ -55,24 +74,52 @@ export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576 }) {
         <label class="dropzone" data-upload data-space="${esc(space.key)}" data-${col.replace('_', '-')}="${owner[col]}"><input type="file" multiple hidden>${icon('download')}<span>Drop files here or <u>browse</u></span></label>
       </section><script src="/files.js"></script>`;
     },
+    // Delete attachments that were never attached to a page or issue (abandoned drafts) after a day.
+    purgeOrphans() {
+      remove(db.prepare("SELECT * FROM attachments WHERE page_id IS NULL AND issue_id IS NULL AND created_at < datetime('now', '-1 day')").all());
+    },
     mount(app, { getSpace }) {
-      const rawBody = express.raw({ type: () => true, limit: maxBytes });
-      app.post('/attachments', rawBody, (req, res) => {
+      files.purgeOrphans();
+      setInterval(() => files.purgeOrphans(), 864e5).unref();
+
+      app.post('/attachments', wrap(async (req, res) => {
         const space = getSpace(String(req.query.space ?? ''));
         if (!space) return res.status(404).json({ error: 'No such space' });
         let pageId = null, issueId = null;
         if (req.query.page) { const p = db.prepare('SELECT id FROM pages WHERE id = ? AND space_id = ?').get(Number(req.query.page), space.id); if (!p) return res.status(404).json({ error: 'No such page' }); pageId = p.id; }
         if (req.query.issue) { const i = db.prepare('SELECT id FROM issues WHERE id = ? AND space_id = ?').get(Number(req.query.issue), space.id); if (!i) return res.status(404).json({ error: 'No such issue' }); issueId = i.id; }
-        if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Empty file' });
+        const used = db.prepare('SELECT COALESCE(SUM(size), 0) n FROM attachments').get().n;
+        const declared = Number(req.get('content-length') ?? 0);
+        const tooBig = () => res.status(413).json({ error: `File is larger than ${Math.round(maxBytes / 1048576)} MB` });
+        const full = () => res.status(413).json({ error: 'This Folio has reached its attachment storage limit' });
+        if (declared > maxBytes) { req.resume(); return tooBig(); }
+        if (used + declared > maxStorageBytes) { req.resume(); return full(); }
+
         const filename = basename(String(req.query.name ?? 'file')).replace(/[\u0000-\u001f"\\/]/g, '').trim().slice(0, 120) || 'file';
-        const mime = MIME[extname(filename).toLowerCase()] ?? 'application/octet-stream';
+        const ext = extname(filename).toLowerCase();
+        const mime = MIME[ext] ?? 'application/octet-stream';
         const stored = randomUUID();
-        writeFileSync(join(root, stored), req.body);
+        const path = join(root, stored);
+        // Stream to disk with a byte counter instead of buffering the whole upload in memory.
+        let size = 0, over = false;
+        const counter = new Transform({
+          transform(chunk, enc, cb) {
+            size += chunk.length;
+            if (size > maxBytes || used + size > maxStorageBytes) { over = true; return size > maxBytes * 4 ? cb(new Error('upload aborted')) : cb(); } // keep reading so the client gets a clean 413
+            cb(null, chunk);
+          },
+        });
+        try {
+          await pipeline(req, counter, createWriteStream(path, { mode: 0o600, flags: 'wx' }));
+        } catch (e) { rmSync(path, { force: true }); throw e; }
+        if (over) { rmSync(path, { force: true }); return size > maxBytes ? tooBig() : full(); }
+        if (!size) { rmSync(path, { force: true }); return res.status(400).json({ error: 'Empty file' }); }
+        if (SNIFF[ext] && !SNIFF[ext](head(path))) { rmSync(path, { force: true }); return res.status(415).json({ error: `The contents of ${filename} do not match its type` }); }
         const id = Number(db.prepare('INSERT INTO attachments (space_id, page_id, issue_id, filename, mime, size, stored, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(space.id, pageId, issueId, filename, mime, req.body.length, stored, req.user.id).lastInsertRowid);
+          .run(space.id, pageId, issueId, filename, mime, size, stored, req.user.id).lastInsertRowid);
         const url = urlFor({ id, filename });
         res.json({ id, url, filename, image: isImage(mime), markdown: isImage(mime) ? `![${filename}](${url})` : `[${filename}](${url})` });
-      });
+      }));
       app.get('/files/:id/:name?', (req, res) => {
         const a = db.prepare('SELECT * FROM attachments WHERE id = ?').get(Number(req.params.id));
         const abs = a && join(root, a.stored);
@@ -89,12 +136,11 @@ export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576 }) {
       app.post('/attachments/:id/delete', (req, res) => {
         const a = db.prepare('SELECT * FROM attachments WHERE id = ?').get(Number(req.params.id));
         if (!a) return res.status(404).send('No such file');
+        if (a.uploaded_by !== req.user.id && req.user.role !== 'admin') return res.status(403).send('Only the person who uploaded a file, or an administrator, can delete it');
         remove([a]);
         const back = String(req.body.back ?? '');
         res.redirect(/^\/(p|i)\/\d+$/.test(back) ? back : '/');
       });
-      // JSON errors for oversized uploads
-      app.use('/attachments', (err, req, res, next) => (err?.type === 'entity.too.large' ? res.status(413).json({ error: `File is larger than ${Math.round(maxBytes / 1048576)} MB` }) : next(err)));
     },
   };
   return files;

@@ -1,5 +1,6 @@
 // Scrum: board, backlog, sprints, issues (with epics, labels, attachments), issue search, drag-and-drop ordering.
 import { tx } from './db.js';
+import { str } from './util.js';
 import { esc, icon, renderMarkdown, hueClass } from './render.js';
 import { logChange, mountReports, sprintStats, burndownSvg } from './reports.js';
 import { mountEpics, epicsFor, epicsPanel } from './epics.js';
@@ -132,7 +133,7 @@ export function mountBoard(app, ctx) {
     const q = req.query;
     const where = ['i.space_id = ?'], args = [space.id];
     const text = String(q.q ?? '').trim();
-    if (text) { where.push("(i.title LIKE ? ESCAPE '\\' OR i.description LIKE ? ESCAPE '\\' OR ('" + space.key.replace(/'/g, '') + "-' || i.num) LIKE ? ESCAPE '\\')"); const like = `%${text.replace(/[\\%_]/g, '\\$&')}%`; args.push(like, like, like); }
+    if (text) { where.push("(i.title LIKE ? ESCAPE '\\' OR i.description LIKE ? ESCAPE '\\' OR (? || '-' || i.num) LIKE ? ESCAPE '\\')"); const like = `%${text.replace(/[\\%_]/g, '\\$&')}%`; args.push(like, like, space.key, like); }
     if (STATUSES.some((s) => s[0] === q.status)) { where.push('i.status = ?'); args.push(q.status); }
     if (TYPES.includes(q.type)) { where.push('i.type = ?'); args.push(q.type); }
     if (PRIORITIES.includes(q.priority)) { where.push('i.priority = ?'); args.push(q.priority); }
@@ -170,9 +171,9 @@ export function mountBoard(app, ctx) {
   app.post('/s/:key/sprints', (req, res) => {
     const space = getSpace(req.params.key);
     if (!space) return res.status(404).send('No such space');
-    const name = (req.body.name ?? '').trim();
+    const name = str(req.body.name, 60);
     if (!name) return res.status(400).send('Name required');
-    db.prepare('INSERT INTO sprints (space_id, name, goal) VALUES (?, ?, ?)').run(space.id, name, (req.body.goal ?? '').trim());
+    db.prepare('INSERT INTO sprints (space_id, name, goal) VALUES (?, ?, ?)').run(space.id, name, str(req.body.goal, 200));
     res.redirect(`/s/${space.key}/backlog`);
   });
   app.post('/sprints/:id/start', (req, res) => {
@@ -235,7 +236,7 @@ export function mountBoard(app, ctx) {
   });
 
   function saveFields(body, space, selfId = null) {
-    const title = (body.title ?? '').trim();
+    const title = str(body.title, 200);
     if (!title) return null;
     // sub-tasks: one level only, same space, parent can't be the issue itself, and an issue with sub-tasks can't become one
     let parent = body.parent_id ? db.prepare('SELECT id, parent_id FROM issues WHERE id = ? AND space_id = ?').get(Number(body.parent_id), space.id) : null;
@@ -245,7 +246,7 @@ export function mountBoard(app, ctx) {
     const assignee = body.assignee_id ? db.prepare('SELECT id FROM users WHERE id = ?').get(Number(body.assignee_id)) : null;
     const epic = body.epic_id ? db.prepare('SELECT id FROM epics WHERE id = ? AND space_id = ?').get(Number(body.epic_id), space.id) : null;
     return {
-      title, description: body.description ?? '', type: optional(body.type, TYPES), priority: PRIORITIES.includes(body.priority) ? body.priority : 'medium',
+      title, description: str(body.description, 100000, { trim: false }), type: optional(body.type, TYPES), priority: PRIORITIES.includes(body.priority) ? body.priority : 'medium',
       status: STATUSES.some((s) => s[0] === body.status) ? body.status : 'todo', points: pointsOf(body.points),
       sprint_id: sprint?.id ?? null, assignee_id: assignee?.id ?? null, epic_id: epic?.id ?? null, labels: parseLabels(body.labels).join(', '), parent_id: parent?.id ?? null,
     };
@@ -437,7 +438,7 @@ export function mountBoard(app, ctx) {
   app.post('/i/:id/comment', (req, res) => {
     const i = getIssue(req.params.id);
     if (!i) return res.status(404).send('No such issue');
-    const body = (req.body.body ?? '').trim();
+    const body = str(req.body.body, 20000);
     if (body) {
       db.prepare('INSERT INTO comments (issue_id, author_id, body) VALUES (?, ?, ?)').run(i.id, req.user.id, body);
       notifier.issueComment(i, spaceById(i.space_id), req.user, body);

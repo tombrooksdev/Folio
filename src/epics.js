@@ -1,5 +1,6 @@
 // Epics: group issues under a larger goal, with progress rolled up from their issues.
 import { esc, icon, renderMarkdown, hueClass } from './render.js';
+import { str } from './util.js';
 import { listIssues, row, sum, crumbs, progressBar } from './issues.js';
 
 export function epicsFor(db, spaceId) {
@@ -28,9 +29,9 @@ export function mountEpics(app, { db, page, getSpace }) {
   app.post('/s/:key/epics', (req, res) => {
     const space = getSpace(req.params.key);
     if (!space) return res.status(404).send('No such space');
-    const name = (req.body.name ?? '').trim().slice(0, 60);
+    const name = str(req.body.name, 60);
     if (!name) return res.status(400).send('Name required');
-    db.prepare('INSERT INTO epics (space_id, name, description) VALUES (?, ?, ?)').run(space.id, name, req.body.description ?? '');
+    db.prepare('INSERT INTO epics (space_id, name, description) VALUES (?, ?, ?)').run(space.id, name, str(req.body.description, 20000, { trim: false }));
     res.redirect(`/s/${space.key}/backlog`);
   });
 
@@ -62,9 +63,9 @@ export function mountEpics(app, { db, page, getSpace }) {
   app.post('/e/:id', (req, res) => {
     const e = getEpic(req.params.id);
     if (!e) return res.status(404).send('No such epic');
-    const name = (req.body.name ?? '').trim().slice(0, 60);
+    const name = str(req.body.name, 60);
     if (!name) return res.status(400).send('Name required');
-    db.prepare('UPDATE epics SET name = ?, description = ? WHERE id = ?').run(name, req.body.description ?? '', e.id);
+    db.prepare('UPDATE epics SET name = ?, description = ? WHERE id = ?').run(name, str(req.body.description, 20000, { trim: false }), e.id);
     res.redirect(`/e/${e.id}`);
   });
   app.post('/e/:id/done', (req, res) => {

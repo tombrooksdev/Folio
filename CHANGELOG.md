@@ -6,6 +6,41 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.9.0] - 2026-10-12
+
+Security hardening, following a full audit of v0.5.0. All 16 findings are addressed (see the notes at the end of this entry). **Check "Changed" before upgrading.**
+
+### Added
+- **Roles**: administrator, member and read-only viewer. Viewers can read everything and change nothing; only administrators manage people and link GitHub repositories; attachments and comments can be deleted by their owner or an administrator. Existing installs promote the first user to administrator automatically.
+- **Account** page: change your password (which signs out your other sessions) and sign out other sessions. **People** page for administrators to add people and change roles.
+- `npm run reset-password` / `folio reset-password`, and `--role` on `add-user`.
+- `FOLIO_SETUP_TOKEN` and `FOLIO_DISABLE_SETUP` to protect or turn off the first-run setup page; setup can now create only one administrator even under concurrent requests.
+- `FOLIO_MAX_STORAGE_MB` (total attachment storage cap) and `FOLIO_ALLOW_REMOTE_IMAGES`.
+- `SECURITY.md`, Dependabot configuration, and `npm audit` in CI.
+- Security regression tests for every finding.
+
+### Changed
+- **Passwords must be at least 10 characters** (up to 1,024), common passwords are refused, and usernames are limited to 2 to 32 letters, numbers, dots, dashes and underscores and are unique ignoring case. Existing accounts keep working.
+- **Remote images (`https://...`) in pages no longer display** unless `FOLIO_ALLOW_REMOTE_IMAGES=1`; they let any author track who views a page. Uploaded images are unaffected.
+- Markdown can no longer contain form fields (only read-only task checkboxes), and external links open with `noopener noreferrer nofollow`.
+- `NODE_ENV=production` (set in the Docker image) turns on `Secure` cookies with the `__Host-` prefix and HSTS by default. Plain-HTTP `localhost` still works; for plain HTTP on another address set `FOLIO_SECURE_COOKIES=0`.
+- The Docker Compose file now publishes Folio on `127.0.0.1` only. Put an HTTPS reverse proxy in front to reach it from elsewhere.
+- Login is throttled per address and per username, takes the same time for unknown users, and uses asynchronous password hashing.
+- The database, attachments and backups are created readable only by their owner (`0600`/`0700`); the Linux service uses `UMask=0077`.
+- Uploads are streamed to disk instead of buffered in memory, rate limited, checked against their file extension, and abandoned uploads are deleted after a day.
+- A stricter Content Security Policy, plus `X-Frame-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` and `Cache-Control: no-store` on signed-in pages; cross-site requests are refused using `Sec-Fetch-Site` and `Origin`.
+- The Docker base image and GitHub Actions are pinned by digest or commit.
+
+### Fixed
+- The GitHub integration could be pointed at other `api.github.com` paths with `../`. Repository names are now validated strictly and only `/repos/...` is ever requested.
+- Stack traces and file paths could be sent to the browser, and repeated or malformed form fields caused server errors. Errors now show a generic message and all form fields are treated as text.
+- Expired sessions were never deleted; they are now removed at start-up and hourly.
+- The issue search built part of its SQL from the space key; it now uses a bound parameter, and space keys are constrained in the schema.
+- A failing GitHub response could crash an async handler; handlers are now wrapped and errors reach the central error page.
+
+### Audit notes
+Fixed: F01 to F14 and F16. Partly fixed: F06 (roles and ownership checks are in; pages are still hard-deleted, with no recycle bin), F13 (`Sec-Fetch-Site` and `Origin` checks are in; there is no per-session CSRF token), F15 (workflow permissions, pinned actions and image, Dependabot and `npm audit` are in; the Express 5 and newer `marked` upgrades are left for a separate, tested change).
+
 ## [0.8.1] - 2026-10-12
 
 ### Fixed
@@ -180,7 +215,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/tombrooksdev/Folio/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/tombrooksdev/Folio/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/tombrooksdev/Folio/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/tombrooksdev/Folio/compare/v0.6.0...v0.7.0

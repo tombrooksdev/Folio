@@ -1,5 +1,6 @@
 // Confluence-style page comments: top-level comments with one level of replies.
 import { esc, icon, renderMarkdown, hueClass } from './render.js';
+import { str } from './util.js';
 
 const av = (name) => `<span class="avatar sm-av ${hueClass(name ?? '?')}" title="${esc(name ?? '')}">${esc((name ?? '?').slice(0, 1).toUpperCase())}</span>`;
 
@@ -25,7 +26,7 @@ export function mountComments(app, { db, notifier }) {
   app.post('/p/:id/comments', (req, res) => {
     const p = db.prepare('SELECT id FROM pages WHERE id = ?').get(Number(req.params.id));
     if (!p) return res.status(404).send('No such page');
-    const body = (req.body.body ?? '').trim();
+    const body = str(req.body.body, 20000);
     let parent = null;
     if (req.body.parent_id) {
       parent = db.prepare('SELECT id, parent_id FROM page_comments WHERE id = ? AND page_id = ?').get(Number(req.body.parent_id), p.id);
@@ -42,7 +43,7 @@ export function mountComments(app, { db, notifier }) {
   app.post('/comments/:id/delete', (req, res) => {
     const c = db.prepare('SELECT * FROM page_comments WHERE id = ?').get(Number(req.params.id));
     if (!c) return res.status(404).send('No such comment');
-    if (c.author_id !== req.user.id) return res.status(403).send('You can only delete your own comments');
+    if (c.author_id !== req.user.id && req.user.role !== 'admin') return res.status(403).send('You can only delete your own comments');
     db.prepare('DELETE FROM page_comments WHERE id = ?').run(c.id);
     res.redirect(`/p/${c.page_id}#comments`);
   });

@@ -7,6 +7,9 @@ PORT=3000
 # (you may also need to allow the port through Windows Firewall).
 FOLIO_HOST=127.0.0.1
 #
+# Protect the first-run setup page with a token
+#FOLIO_SETUP_TOKEN=
+#
 # Largest attachment, in megabytes
 #FOLIO_MAX_UPLOAD_MB=25
 #

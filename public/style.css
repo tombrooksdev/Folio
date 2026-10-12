@@ -604,3 +604,10 @@ button.on{color:var(--accent)!important;border-color:var(--accent)!important}
 .tour-pop h3{font:400 1.45rem var(--serif);margin-bottom:.3rem}.tour-pop p{margin:0 0 1rem;color:var(--fg-2);font-size:.92rem;line-height:1.55}
 .tour-foot{display:flex;align-items:center;gap:.5rem}
 .tour-dots{display:flex;gap:.25rem}.tour-dots span{width:6px;height:6px;border-radius:50%;background:var(--line-2)}.tour-dots span.on{background:var(--accent)}
+
+/* ---------- security UI ---------- */
+.warn-note,.ok-note{margin:0;padding:.55rem .75rem;border-radius:7px;font-size:.88rem}
+.warn-note{background:light-dark(#fff7e6,#33270f);border:1px solid light-dark(#ffe3a8,#5a4318);color:var(--fg-2)}
+.ok-note{background:color-mix(in srgb,var(--ok) 12%,transparent);color:var(--ok);margin-bottom:1rem}
+.user-row{cursor:default}.user-row:hover{padding-left:.5rem}.user-row select{margin-left:auto}
+.top .avatar{text-decoration:none;color:var(--fg-2)}
