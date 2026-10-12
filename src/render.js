@@ -152,7 +152,7 @@ ${bare ? body : `<header class="top">
       </div></div>` : ''}` : ''}
   </div>
   ${user ? `<div class="top-right">
-    <button class="cmdk-btn" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search</span><kbd>/</kbd></button>
+    <button class="cmdk-btn" type="button" id="cmdk-open" aria-label="Search pages" aria-haspopup="dialog" title="Search (/ or Ctrl K)">${icon('search')}<span>Search pages</span><kbd>/</kbd></button>
     <div class="menu-wrap"><button class="icon-btn" type="button" id="bell" aria-label="Notifications" title="Notifications" aria-haspopup="true" aria-expanded="false"><span class="ico">${icon('bell')}<span class="badge" id="bell-count"${unread ? '' : ' hidden'}>${unread > 99 ? '99+' : unread}</span></span></button><div class="menu bell-menu" id="bell-menu"></div></div>
     <div class="menu-wrap"><button class="icon-btn" type="button" id="help-btn" aria-label="Help" title="Help" aria-haspopup="true" aria-expanded="false">${icon('help')}</button>
       <div class="menu help-menu" id="help-menu" role="menu">
@@ -180,7 +180,11 @@ ${bare ? body : `<header class="top">
 </div>`}
 ${user && !bare ? createDialogs({ spaces, people, spaceKey, canWrite }) : ''}
 <div class="cmdk" id="cmdk" role="dialog" aria-modal="true" aria-label="Search">
-  <div class="cmdk-box"><input id="cmdk-input" type="search" placeholder="Search every page..." aria-label="Search every page" autocomplete="off"><div class="cmdk-list" id="cmdk-list"></div></div>
+  <div class="cmdk-box">
+    <div class="cmdk-field">${icon('search')}<input id="cmdk-input" type="text" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list" placeholder="Search every page" aria-label="Search every page" autocomplete="off" spellcheck="false"><kbd>esc</kbd></div>
+    <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Results"></div>
+    <div class="cmdk-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span><span><kbd>esc</kbd> to close</span></div>
+  </div>
 </div>
 <script src="/app.js"></script>
 ${user && !bare ? '<script src="/tour.js"></script><script type="module" src="/mentions.js"></script>' : ''}${user && !bare && canWrite ? '<script src="/tree.js"></script>' : ''}

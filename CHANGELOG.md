@@ -6,6 +6,16 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.12.1] - 2026-10-12
+
+### Changed
+- **A better search box.** The box in the top bar is wider and calmer, and shows a clear focus ring. The search palette (`/` or <kbd>Ctrl</kbd>+<kbd>K</kbd>) now has a search icon and an `esc` hint, shows your **recently viewed pages** before you type, **highlights the words you typed** in the title and in a short excerpt, shows which space each result is in, and ends with a **See every result** row that opens the full search. A footer lists the keys. It works in light, dark and high-contrast themes and on a phone.
+- The mouse and the keyboard now share one highlight, and the list scrolls to keep the chosen result in view. Screen readers get a proper combobox and listbox.
+- Recently viewed pages are now remembered to the millisecond, so pages opened in the same second keep their order.
+
+### Fixed
+- After closing the search palette with <kbd>Esc</kbd>, pressing `/` did nothing until you clicked somewhere, because the hidden search field kept keyboard focus.
+
 ## [0.12.0] - 2026-10-12
 
 ### Added

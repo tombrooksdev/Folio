@@ -74,6 +74,19 @@ test('people.json lists usernames for the picker, for signed-in people only', as
   close();
 });
 
+test('recent.json lists what you viewed, newest first, only for you', async () => {
+  const { admin, join, mk, close } = await boot();
+  const a = await mk('First'), b = await mk('Second');
+  const sam = await join('sam');
+  assert.deepEqual(JSON.parse((await admin('/recent.json')).text), []);
+  await admin(`/p/${a}`); await admin(`/p/${b}`);
+  const r = JSON.parse((await admin('/recent.json')).text);
+  assert.deepEqual(r.map((x) => x.title), ['Second', 'First']);
+  assert.equal(r[0].space, 'Eng');
+  assert.deepEqual(JSON.parse((await sam('/recent.json')).text), []); // other people's history is not shown
+  close();
+});
+
 test('pages stay alphabetical until someone reorders; new pages follow the rule', async () => {
   const { admin, mk, order, close } = await boot();
   const c = await mk('Cat'), a = await mk('Apple');

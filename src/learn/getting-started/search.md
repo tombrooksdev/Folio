@@ -6,7 +6,7 @@ Folio is built to be fast to move around in.
 
 ## Search
 
-Press `/` (or `Ctrl K`) and start typing. Results appear as you type, and the arrow keys and `Enter` open one. Search covers page titles and bodies.
+Press `/` (or `Ctrl K`) and start typing. Before you type, the pages you opened most recently are listed, so getting back to them is two keystrokes. As you type, matches are highlighted in the title and in a short excerpt, each with the space it lives in. The arrow keys and `Enter` open one (so does the mouse), and the last row, **See every result**, opens the full search page. `Esc` closes it. Search covers page titles and bodies.
 
 For issues, open **Issues** in a space. You can combine text with status, type, priority, assignee, epic, label and sprint.
 
@@ -21,6 +21,7 @@ For issues, open **Issues** in a space. You can combine text with status, type, 
 | `G` then `B` | Go to the board |
 | `G` then `L` | Go to the backlog |
 | `G` then `I` | Go to issue search |
+| `G` then `T` | Go to Tasks |
 | `[` | Hide or show the sidebar |
 | `?` | Show this list |
 

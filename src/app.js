@@ -212,8 +212,11 @@ export function createApp(db, {
   });
   // Light per-user rate limits on the endpoints that are expensive to serve.
   const hot = createLimiter({ max: 120, windowMs: 60e3 }), uploads = createLimiter({ max: 60, windowMs: 60e3 });
-  app.use(['/preview', '/search.json'], (req, res, next) => (hot.allowed(req.user.id) ? (hot.hit(req.user.id), next()) : deny(req, res, 429, 'Slow down a little')));
+  app.use(['/preview', '/search.json', '/recent.json'], (req, res, next) => (hot.allowed(req.user.id) ? (hot.hit(req.user.id), next()) : deny(req, res, 429, 'Slow down a little')));
   app.use('/attachments', (req, res, next) => (req.method !== 'POST' || uploads.allowed(req.user.id) ? (req.method === 'POST' && uploads.hit(req.user.id), next()) : deny(req, res, 429, 'Too many uploads, try again in a minute')));
+
+  // Recently viewed pages, shown in the search palette before anything is typed.
+  app.get('/recent.json', (req, res) => res.json(db.prepare('SELECT p.id, p.title, s.name space FROM page_views v JOIN pages p ON p.id = v.page_id JOIN spaces s ON s.id = p.space_id WHERE v.user_id = ? ORDER BY v.at DESC LIMIT 6').all(req.user.id)));
 
   // Names for the @mention picker.
   app.get('/people.json', (req, res) => res.json(db.prepare('SELECT username FROM users ORDER BY username COLLATE NOCASE').all().map((u) => u.username)));
@@ -398,7 +401,8 @@ export function createApp(db, {
     if (!p) return res.status(404).send('No such page');
     const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(p.space_id);
     const crumbs = breadcrumbs(p);
-    db.prepare("INSERT INTO page_views (user_id, page_id) VALUES (?, ?) ON CONFLICT (user_id, page_id) DO UPDATE SET at = CURRENT_TIMESTAMP").run(req.user.id, p.id);
+    // milliseconds, so two pages opened in the same second still have an order
+    db.prepare("INSERT INTO page_views (user_id, page_id, at) VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now')) ON CONFLICT (user_id, page_id) DO UPDATE SET at = excluded.at").run(req.user.id, p.id);
     const starred = !!db.prepare('SELECT 1 FROM page_stars WHERE page_id = ? AND user_id = ?').get(p.id, req.user.id);
     const labels = db.prepare('SELECT label FROM page_labels WHERE page_id = ? ORDER BY label').all(p.id).map((l) => l.label);
     const author = p.updated_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(p.updated_by)?.username : null;

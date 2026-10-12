@@ -70,39 +70,86 @@ const onScroll = () => {
 addEventListener('scroll', onScroll, { passive: true });
 onScroll();
 
-// command palette
+// command palette: recent pages when empty, matches highlighted as you type, a row for the full search
 const box = $('#cmdk'), input = $('#cmdk-input'), list = $('#cmdk-list');
-let sel = 0, timer, results = [];
+let sel = 0, timer, rows = [], query = '', opener = null, token = 0;
 const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-function openPalette() { box.classList.add('open'); input.value = ''; list.innerHTML = '<div class="cmdk-empty">Type to search every page</div>'; input.focus(); }
-function closePalette() { box.classList.remove('open'); }
-function paint() {
-  list.innerHTML = results.length
-    ? results.map((r, i) => `<a href="/p/${r.id}" class="${i === sel ? 'sel' : ''}">${esc(r.title)}<small>${esc(r.space)} · ${esc(r.snip)}</small></a>`).join('')
-    : '<div class="cmdk-empty">No matching pages</div>';
+const ICON = {
+  file: 'M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5zM14 3v5h5M9 13h6M9 17h6',
+  clock: 'M12 7v5l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  arrow: 'M5 12h14m-6-6l6 6-6 6',
+};
+const svg = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
+// wrap each typed word in <mark> (on text that is already escaped)
+const mark = (text, q) => {
+  const terms = q.split(/\s+/).filter(Boolean).map((t) => esc(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return terms.length ? esc(text).replace(new RegExp(`(${terms.join('|')})`, 'gi'), '<mark>$1</mark>') : esc(text);
+};
+function openPalette() {
+  opener = document.activeElement;
+  box.classList.add('open'); input.value = ''; query = ''; sel = 0;
+  document.body.classList.add('cmdk-on');
+  input.focus();
+  showRecent();
+}
+function closePalette() {
+  if (!box.classList.contains('open')) return;
+  box.classList.remove('open'); document.body.classList.remove('cmdk-on');
+  token++; clearTimeout(timer);
+  input.blur(); // a hidden field must not keep focus, or the "/" shortcut thinks you are typing
+  if (opener?.isConnected && opener !== document.body) opener.focus();
+}
+function paint(label) {
+  list.innerHTML = (label ? `<div class="cmdk-label">${label}</div>` : '') + rows.map((r, i) => (r.all
+    ? `<a role="option" id="cmdk-o-${i}" class="cmdk-all${i === sel ? ' sel' : ''}" aria-selected="${i === sel}" data-i="${i}" href="/search?q=${encodeURIComponent(query)}">${svg('arrow')}<span class="cm-main">See every result for <b>“${esc(query)}”</b></span></a>`
+    : `<a role="option" id="cmdk-o-${i}" class="${i === sel ? 'sel' : ''}" aria-selected="${i === sel}" data-i="${i}" href="/p/${r.id}">${svg(r.recent ? 'clock' : 'file')}<span class="cm-main"><span class="cm-title">${mark(r.title, query)}</span>${r.snip ? `<span class="cm-snip">${mark(r.snip, query)}</span>` : ''}</span><span class="cm-space">${esc(r.space)}</span></a>`)).join('');
+  input.setAttribute('aria-activedescendant', rows.length ? `cmdk-o-${sel}` : '');
+  list.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+}
+function pick(i, e) { const r = rows[i]; if (r) { if (e?.preventDefault) e.preventDefault(); location.href = r.all ? `/search?q=${encodeURIComponent(query)}` : `/p/${r.id}`; } }
+async function showRecent() {
+  const mine = ++token;
+  list.innerHTML = '<div class="cmdk-empty">Type to search every page</div>'; rows = [];
+  try {
+    const r = await (await fetch('/recent.json')).json();
+    if (mine !== token || query) return;
+    rows = r.map((x) => ({ ...x, recent: true })); sel = 0;
+    if (rows.length) paint('Recently viewed');
+  } catch { /* leave the hint */ }
+}
+async function run(q) {
+  const mine = ++token;
+  try {
+    const r = await (await fetch('/search.json?q=' + encodeURIComponent(q))).json();
+    if (mine !== token) return; // a newer keystroke is already on its way
+    rows = [...r, { all: true }]; sel = 0;
+    if (!r.length) { list.innerHTML = `<div class="cmdk-empty">No pages match <b>“${esc(q)}”</b></div><a role="option" id="cmdk-o-0" class="cmdk-all sel" aria-selected="true" data-i="0" href="/search?q=${encodeURIComponent(q)}">${svg('arrow')}<span class="cm-main">Search with every word</span></a>`; input.setAttribute('aria-activedescendant', 'cmdk-o-0'); return; }
+    paint();
+  } catch { list.innerHTML = '<div class="cmdk-empty">Search is unavailable right now</div>'; rows = []; }
 }
 input.addEventListener('input', () => {
   clearTimeout(timer);
-  const q = input.value.trim();
-  if (!q) { list.innerHTML = '<div class="cmdk-empty">Type to search every page</div>'; return; }
-  timer = setTimeout(async () => {
-    results = await (await fetch('/search.json?q=' + encodeURIComponent(q))).json();
-    sel = 0; paint();
-  }, 120);
+  query = input.value.trim();
+  if (!query) { showRecent(); return; }
+  timer = setTimeout(() => run(query), 100);
 });
 input.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowDown') { sel = Math.min(sel + 1, results.length - 1); paint(); e.preventDefault(); }
-  if (e.key === 'ArrowUp') { sel = Math.max(sel - 1, 0); paint(); e.preventDefault(); }
-  if (e.key === 'Enter') {
-    if (results[sel]) location.href = '/p/' + results[sel].id;
+  if (e.key === 'ArrowDown' && rows.length) { sel = (sel + 1) % rows.length; paint(rows[0]?.recent ? 'Recently viewed' : ''); e.preventDefault(); }
+  else if (e.key === 'ArrowUp' && rows.length) { sel = (sel - 1 + rows.length) % rows.length; paint(rows[0]?.recent ? 'Recently viewed' : ''); e.preventDefault(); }
+  else if (e.key === 'Enter') {
+    if (rows[sel]) pick(sel, e);
     else if (input.value.trim()) location.href = '/search?q=' + encodeURIComponent(input.value.trim());
   }
+});
+list.addEventListener('mousemove', (e) => { // the pointer and the keyboard share one highlight
+  const a = e.target.closest('a[data-i]');
+  if (a && Number(a.dataset.i) !== sel) { list.querySelector('.sel')?.classList.remove('sel'); sel = Number(a.dataset.i); a.classList.add('sel'); input.setAttribute('aria-activedescendant', a.id); }
 });
 box.addEventListener('click', (e) => { if (e.target === box) closePalette(); });
 $('#cmdk-open')?.addEventListener('click', openPalette);
 $('#cmdk-open-hero')?.addEventListener('click', openPalette);
 addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && $('#cmdk-open')) { e.preventDefault(); openPalette(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && $('#cmdk-open')) { e.preventDefault(); box.classList.contains('open') ? closePalette() : openPalette(); }
   if (e.key === 'Escape') closePalette();
 });
 

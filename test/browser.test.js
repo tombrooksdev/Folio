@@ -29,7 +29,8 @@ async function session() {
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, timezoneId: 'Europe/London' });
   const page = await ctx.newPage();
   const errors = [];
-  page.on('pageerror', (e) => errors.push(e.message));
+  // Chromium reports this harmless message when a page navigates the instant another page is revealed (Folio uses cross-page view transitions)
+  page.on('pageerror', (e) => { if (!/Transition was aborted because of invalid state/.test(e.message)) errors.push(e.message); });
   page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) errors.push(m.text()); });
   await page.goto(`${base}/setup`);
   await page.fill('[name=username]', 'tom');
@@ -232,6 +233,53 @@ test('dragging a page in the sidebar reorders and nests it', { skip }, async () 
   // a page cannot be dropped into its own child
   await page.locator('.tree li[data-page="3"] > a').dragTo(page.locator('.tree li[data-page="2"] > a'), { targetPosition: { x: 20, y: h / 2 } }).catch(() => {});
   assert.equal(db.prepare("SELECT parent_id FROM pages WHERE title = 'Gamma'").get().parent_id, null);
+  assert.deepEqual(errors, []);
+  await done();
+});
+
+test('search palette: recent pages, highlighted results, keyboard and mouse, Esc then / reopens', { skip }, async () => {
+  const { page, base, errors, done } = await session();
+  await page.goto(`${base}/`);
+  await page.evaluate(async () => {
+    await fetch('/spaces', { method: 'POST', body: new URLSearchParams({ name: 'Eng', key: 'ENG' }) });
+    for (const [t, b] of [['Deployment runbook', 'restart the database safely'], ['Backup policy', 'nightly database backups'], ['Onboarding', 'welcome aboard']])
+      await fetch('/s/ENG/pages', { method: 'POST', body: new URLSearchParams({ title: t, body: b }) });
+  });
+  await page.goto(`${base}/p/1`); await page.goto(`${base}/p/3`);
+  await page.keyboard.press('/');
+  await page.waitForSelector('.cmdk-label');
+  assert.equal(await page.textContent('.cmdk-label'), 'Recently viewed');
+  assert.deepEqual(await page.$$eval('.cm-title', (e) => e.map((x) => x.textContent)), ['Onboarding', 'Deployment runbook', 'Backup policy']); // newest first (creating a page also opens it)
+  assert.equal(await page.getAttribute('#cmdk-input', 'role'), 'combobox');
+  await page.keyboard.type('databas');
+  await page.waitForSelector('.cm-snip mark');
+  assert.equal(await page.locator('.cmdk-list a[role=option]').count(), 3); // two pages and the "see every result" row
+  assert.match(await page.textContent('.cmdk-all'), /See every result for “databas”/);
+  assert.equal(await page.locator('.cmdk-all').evaluate((e) => e.getBoundingClientRect().height < 50), true); // one line
+  // the pointer and the arrow keys share one highlight
+  await page.locator('.cmdk-list a[role=option]').nth(1).hover();
+  assert.equal(await page.locator('.cmdk-list a.sel').count(), 1);
+  assert.equal(await page.getAttribute('#cmdk-input', 'aria-activedescendant'), 'cmdk-o-1');
+  await page.keyboard.press('ArrowUp');
+  assert.equal(await page.getAttribute('#cmdk-input', 'aria-activedescendant'), 'cmdk-o-0');
+  // Escape closes, gives focus back, and the shortcut works again straight away
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#cmdk.open').count(), 0);
+  assert.notEqual(await page.evaluate(() => document.activeElement.id), 'cmdk-input');
+  await page.keyboard.press('/');
+  await page.waitForSelector('#cmdk.open');
+  assert.equal(await page.inputValue('#cmdk-input'), ''); // starts clean
+  await page.keyboard.type('nightly');
+  await page.waitForSelector('.cmdk-list a.sel');
+  await page.keyboard.press('Enter');
+  await page.waitForURL(`${base}/p/2`);
+  await page.waitForLoadState('load');
+  // nothing matches: say so and offer the full search
+  await page.keyboard.press('Control+k');
+  await page.keyboard.type('qqqqq');
+  await page.waitForSelector('.cmdk-empty b');
+  await page.keyboard.press('Enter');
+  await page.waitForURL(/\/search\?q=qqqqq/);
   assert.deepEqual(errors, []);
   await done();
 });
