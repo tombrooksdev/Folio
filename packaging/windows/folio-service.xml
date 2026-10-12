@@ -1,0 +1,14 @@
+<service>
+  <id>Folio</id>
+  <name>Folio</name>
+  <description>Folio wiki and Scrum board</description>
+  <executable>%SystemRoot%\System32\cmd.exe</executable>
+  <arguments>/c ""%BASE%\..\folio.cmd" start"</arguments>
+  <startmode>Automatic</startmode>
+  <logpath>%ProgramData%\Folio\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>5120</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+</service>

@@ -2,3 +2,7 @@ node_modules
 data/*
 !data/.gitkeep
 .env
+
+dist
+packaging/.cache
+packaging/.stage

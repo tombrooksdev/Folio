@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+  id folio >/dev/null 2>&1 || adduser --system --group --home /var/lib/folio --no-create-home --shell /usr/sbin/nologin folio >/dev/null
+  mkdir -p /var/lib/folio
+  chown -R folio:folio /var/lib/folio
+  ln -sf /opt/folio/bin/folio /usr/bin/folio
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+    systemctl enable folio >/dev/null 2>&1 || true
+    systemctl restart folio || true
+    PORT_NUM=$(. /etc/folio/folio.env 2>/dev/null; echo "${PORT:-3000}")
+    echo "Folio is running at http://localhost:$PORT_NUM  (open it to create your admin account)"
+  else
+    echo "Folio installed. systemd was not detected: start it with 'folio start'."
+  fi
+fi
+exit 0

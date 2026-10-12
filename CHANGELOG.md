@@ -6,6 +6,24 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.7.0] - 2026-10-12
+
+Installers for Windows and Linux.
+
+### Added
+- **Windows installer** (`Folio-Setup-x.y.z.exe`): installs to Program Files with a private Node.js, Start menu and desktop shortcuts, an optional Windows service that starts with Windows, an optional firewall rule for network access, and an uninstaller that keeps your data in `C:\ProgramData\Folio`. Supports silent install (`/S`).
+- **Windows portable zip** with a "Start Folio" launcher that runs quietly and opens your browser.
+- **Debian/Ubuntu/Raspberry Pi OS packages** (`.deb`, amd64 and arm64) that set up a hardened systemd service, a `folio` system user and `/etc/folio/folio.env`.
+- **Linux tarball** (x64 and arm64) with `install.sh`, or run in place without installing.
+- `folio` command line on Linux and Windows: `start`, `add-user`, `backup`, `config`, and `stop` / `open` on Windows.
+- `FOLIO_HOST` setting to choose which address Folio listens on.
+- `npm run package` and a release workflow that builds everything, verifies the Node.js download against its published checksum, and attaches checksums to the GitHub release when a `v*` tag is pushed.
+- [Installation guide](docs/INSTALL.md).
+
+### Changed
+- The server prints a clear message if the port is already in use, and shuts down cleanly on SIGTERM.
+- The SQLite "experimental" warning is hidden when started through the `folio` command.
+
 ## [0.6.0] - 2026-10-12
 
 Closer to Jira and Confluence, without the bloat.
@@ -132,7 +150,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/tombrooksdev/Folio/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/tombrooksdev/Folio/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/tombrooksdev/Folio/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tombrooksdev/Folio/compare/v0.3.0...v0.4.0

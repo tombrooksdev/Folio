@@ -115,6 +115,17 @@ Pick one from the palette icon in the top bar. Your choice is remembered in your
 
 Also included: Paper, Blush, Solarized, Forest, Nord and High contrast.
 
+## Install
+
+| | |
+|---|---|
+| **Windows** | Download `Folio-Setup-x.y.z.exe` from the [releases](https://github.com/tombrooksdev/Folio/releases) and run it. |
+| **Debian / Ubuntu / Raspberry Pi** | `sudo apt install ./folio_x.y.z_amd64.deb` (or `_arm64.deb`) |
+| **Other Linux** | Unpack `folio-x.y.z-linux-x64.tar.gz` and run `sudo ./install.sh` |
+| **Docker** | `docker compose up -d --build` |
+
+No separate Node.js install is needed for the installers. Full guide, including portable mode, settings and upgrades: [docs/INSTALL.md](docs/INSTALL.md).
+
 ## Quick start
 
 ### Docker (recommended)

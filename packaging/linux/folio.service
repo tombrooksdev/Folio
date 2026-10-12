@@ -1,0 +1,25 @@
+[Unit]
+Description=Folio wiki and Scrum board
+Documentation=https://github.com/tombrooksdev/Folio
+After=network.target
+
+[Service]
+Type=simple
+User=folio
+Group=folio
+Environment=PORT=3000
+EnvironmentFile=-/etc/folio/folio.env
+ExecStart=/opt/folio/bin/folio start
+Restart=on-failure
+RestartSec=3
+StateDirectory=folio
+WorkingDirectory=/var/lib/folio
+# Hardening: Folio only needs to write to its own data folder.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/folio
+
+[Install]
+WantedBy=multi-user.target

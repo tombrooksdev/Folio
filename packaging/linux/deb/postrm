@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+  rm -f /usr/bin/folio
+  [ -d /run/systemd/system ] && systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+if [ "$1" = "purge" ]; then
+  echo "Folio's data in /var/lib/folio was kept. Delete it yourself if you no longer need it."
+fi
+exit 0

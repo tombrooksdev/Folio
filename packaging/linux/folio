@@ -1,0 +1,69 @@
+#!/bin/sh
+# Folio command line: start the server, add users, back up, show configuration.
+set -e
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+NODE="$ROOT/runtime/bin/node"
+[ -x "$NODE" ] || NODE=$(command -v node || true)
+[ -n "$NODE" ] || { echo "folio: no Node.js runtime found" >&2; exit 1; }
+APP="$ROOT/app"
+
+# Installed (deb / install.sh) vs portable (run from where it was unpacked)
+if [ "$ROOT" = "/opt/folio" ]; then
+  INSTALLED=1
+  [ -r /etc/folio/folio.env ] && { set -a; . /etc/folio/folio.env; set +a; }
+  : "${FOLIO_DB:=/var/lib/folio/folio.db}"
+  : "${FOLIO_UPLOAD_DIR:=/var/lib/folio/uploads}"
+else
+  INSTALLED=0
+  : "${FOLIO_DB:=$ROOT/data/folio.db}"
+  : "${FOLIO_UPLOAD_DIR:=$ROOT/data/uploads}"
+fi
+export FOLIO_DB FOLIO_UPLOAD_DIR
+NODE_OPTS="--disable-warning=ExperimentalWarning"
+
+# Commands that touch the database run as the service user so file ownership stays correct.
+as_service_user() {
+  if [ "$INSTALLED" = 1 ] && [ "$(id -u)" = 0 ] && id folio >/dev/null 2>&1; then
+    exec runuser -u folio -- "$SELF" "$@"
+  fi
+}
+
+case "${1:-start}" in
+  start)
+    mkdir -p "$(dirname "$FOLIO_DB")" "$FOLIO_UPLOAD_DIR"
+    exec "$NODE" $NODE_OPTS "$APP/src/server.js"
+    ;;
+  add-user)
+    shift; as_service_user add-user "$@"
+    exec "$NODE" $NODE_OPTS "$APP/scripts/add-user.js" "$@"
+    ;;
+  backup)
+    shift; as_service_user backup "$@"
+    exec "$NODE" $NODE_OPTS "$APP/scripts/backup.js" "$@"
+    ;;
+  config)
+    echo "Version:      $("$NODE" -p "require('$APP/package.json').version")"
+    echo "Install:      $ROOT ($([ "$INSTALLED" = 1 ] && echo installed || echo portable))"
+    echo "Database:     $FOLIO_DB"
+    echo "Attachments:  $FOLIO_UPLOAD_DIR"
+    [ "$INSTALLED" = 1 ] && echo "Config file:  /etc/folio/folio.env" && echo "Service:      systemctl status folio"
+    echo "Address:      http://localhost:${PORT:-3000}"
+    ;;
+  version|--version|-v)
+    "$NODE" -p "require('$APP/package.json').version"
+    ;;
+  help|--help|-h|*)
+    cat <<USAGE
+Folio: self-hosted wiki and Scrum board
+
+Usage: folio <command>
+
+  start               Run the server in the foreground (the service does this for you)
+  add-user <name>     Create a user (asks for a password)
+  backup [file]       Back up the database and attachments
+  config              Show where things live
+  version             Print the version
+USAGE
+    ;;
+esac

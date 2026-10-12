@@ -1,0 +1,18 @@
+# Folio settings. One NAME=value per line. Restart Folio after changing this file.
+#
+# Port to listen on
+PORT=3000
+#
+# 127.0.0.1 = only this computer. Use 0.0.0.0 to let other computers on your network connect
+# (you may also need to allow the port through Windows Firewall).
+FOLIO_HOST=127.0.0.1
+#
+# Largest attachment, in megabytes
+#FOLIO_MAX_UPLOAD_MB=25
+#
+# GitHub token for private repositories or higher rate limits (read-only scope is enough)
+#FOLIO_GITHUB_TOKEN=
+#
+# Set both to 1 only when Folio is behind an HTTPS reverse proxy
+#FOLIO_SECURE_COOKIES=1
+#FOLIO_TRUST_PROXY=1
