@@ -17,7 +17,7 @@
     "reset-password": "node scripts/reset-password.js"
   },
   "dependencies": {
-    "express": "^4.21.0",
+    "express": "^5.2.1",
     "marked": "^14.1.0",
     "sanitize-html": "^2.13.0"
   },
