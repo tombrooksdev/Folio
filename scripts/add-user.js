@@ -1,5 +1,6 @@
 // Create a user from the command line:  npm run add-user -- <username> [--role admin|member|viewer]
 // The first user ever created is an administrator. The password is asked for (input hidden).
+import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { openDb } from '../src/db.js';
 import { hashPassword, validatePassword, validateUsername, ROLES } from '../src/auth.js';
@@ -24,7 +25,7 @@ const password = process.env.FOLIO_PASSWORD ?? (await askHidden('Password (10+ c
 const problem = validatePassword(password, username);
 if (problem) { console.error(problem); process.exit(1); }
 
-const db = openDb(process.env.FOLIO_DB ?? new URL('../data/folio.db', import.meta.url).pathname);
+const db = openDb(process.env.FOLIO_DB ?? fileURLToPath(new URL('../data/folio.db', import.meta.url)));
 if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) { console.error(`A user named "${username}" already exists.`); process.exit(1); }
 const first = !db.prepare('SELECT 1 FROM users').get();
 const finalRole = role ?? (first ? 'admin' : 'member');

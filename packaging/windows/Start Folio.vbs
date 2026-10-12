@@ -1,4 +1,5 @@
-' Starts Folio in the background (no console window) if it is not running, then opens it in your browser.
+' Starts Folio in the background (no console window) if it is not running, then opens it in its own app window
+' (Microsoft Edge or Chrome without tabs or address bar), or in your default browser if neither is installed.
 Option Explicit
 Dim sh, fso, base, data, port, i, ts, line
 Set sh = CreateObject("WScript.Shell")
@@ -37,4 +38,27 @@ If Not IsUp() Then
     If IsUp() Then Exit For
   Next
 End If
-sh.Run "http://localhost:" & port
+Function FindBrowser()
+  Dim names, roots, r, n, p
+  names = Array("Microsoft\Edge\Application\msedge.exe", "Google\Chrome\Application\chrome.exe")
+  roots = Array(sh.ExpandEnvironmentStrings("%ProgramFiles(x86)%"), sh.ExpandEnvironmentStrings("%ProgramFiles%"), sh.ExpandEnvironmentStrings("%LocalAppData%"))
+  FindBrowser = ""
+  For Each n In names
+    For Each r In roots
+      p = r & "\" & n
+      If fso.FileExists(p) Then
+        FindBrowser = p
+        Exit Function
+      End If
+    Next
+  Next
+End Function
+
+Dim browser, url
+url = "http://localhost:" & port
+browser = FindBrowser()
+If browser <> "" Then
+  sh.Run """" & browser & """ --app=" & url, 1, False
+Else
+  sh.Run url
+End If

@@ -1,4 +1,5 @@
 // Set a new password for a user and sign them out everywhere:  npm run reset-password -- <username>
+import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { openDb } from '../src/db.js';
 import { hashPassword, validatePassword } from '../src/auth.js';
@@ -12,7 +13,7 @@ function askHidden(q) {
     rl.question(q, (a) => { rl.close(); console.log(); resolve(a); });
   });
 }
-const db = openDb(process.env.FOLIO_DB ?? new URL('../data/folio.db', import.meta.url).pathname);
+const db = openDb(process.env.FOLIO_DB ?? fileURLToPath(new URL('../data/folio.db', import.meta.url)));
 const user = db.prepare('SELECT id, username FROM users WHERE username = ? COLLATE NOCASE').get(username);
 if (!user) { console.error(`No user named "${username}".`); process.exit(1); }
 const password = await askHidden('New password (10+ characters): ');

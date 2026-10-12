@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { readFileSync } from 'node:fs';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -26,7 +27,7 @@ const parseCookies = (h = '') =>
 export function createApp(db, {
   secureCookies = false,
   trustProxy = false,
-  uploadDir = new URL('../data/uploads', import.meta.url).pathname,
+  uploadDir = fileURLToPath(new URL('../data/uploads', import.meta.url)),
   maxUploadMb = 25,
   maxStorageMb = 2048,
   github = createGithub(),
@@ -73,7 +74,7 @@ export function createApp(db, {
     next();
   });
   // 2. Static assets.
-  app.use(express.static(new URL('../public', import.meta.url).pathname, { setHeaders: (res, f) => res.set('Cache-Control', f.endsWith('.woff2') ? 'public, max-age=31536000, immutable' : 'no-cache') }));
+  app.use(express.static(fileURLToPath(new URL('../public', import.meta.url)), { setHeaders: (res, f) => res.set('Cache-Control', f.endsWith('.woff2') ? 'public, max-age=31536000, immutable' : 'no-cache') }));
 
   // 3. Cross-site request defence, then identify the user.
   app.use((req, res, next) => {

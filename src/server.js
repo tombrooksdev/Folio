@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { writeFileSync, rmSync } from 'node:fs';
 import { openDb } from './db.js';
 import { createApp } from './app.js';
@@ -5,7 +6,7 @@ import { createGithub } from './github.js';
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.FOLIO_HOST ?? '0.0.0.0';
-const file = process.env.FOLIO_DB ?? new URL('../data/folio.db', import.meta.url).pathname;
+const file = process.env.FOLIO_DB ?? fileURLToPath(new URL('../data/folio.db', import.meta.url));
 const production = process.env.NODE_ENV === 'production';
 // Secure cookies: on when asked for, on by default in production, off only if explicitly disabled.
 const secureCookies = process.env.FOLIO_SECURE_COOKIES === '1' || (production && process.env.FOLIO_SECURE_COOKIES !== '0');
@@ -19,7 +20,7 @@ const app = createApp(db, {
   disableSetup,
   allowRemoteImages: process.env.FOLIO_ALLOW_REMOTE_IMAGES === '1',
   maxStorageMb: Number(process.env.FOLIO_MAX_STORAGE_MB ?? 2048),
-  uploadDir: process.env.FOLIO_UPLOAD_DIR ?? new URL('../data/uploads', import.meta.url).pathname,
+  uploadDir: process.env.FOLIO_UPLOAD_DIR ?? fileURLToPath(new URL('../data/uploads', import.meta.url)),
   maxUploadMb: Number(process.env.FOLIO_MAX_UPLOAD_MB ?? 25),
   github: createGithub({ token: process.env.FOLIO_GITHUB_TOKEN ?? '' }),
   webhookUrl: process.env.FOLIO_WEBHOOK_URL ?? '',

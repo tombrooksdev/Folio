@@ -6,6 +6,18 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.9.3] - 2026-10-12
+
+Windows fixes.
+
+### Fixed
+- **Styles, scripts, fonts and images did not load on Windows.** Folio built file paths from a URL's `pathname`, which gives `/C:/Program Files/...` on Windows, so the static folder was never found. Paths now use `fileURLToPath`.
+- **`folio.cmd`**: the `backup` and `reset-password` commands were wired up wrongly and `config` ran into them.
+
+### Changed
+- **Folio opens in its own app window** (Microsoft Edge or Chrome without tabs or address bar) from the desktop and Start menu shortcuts; the default browser is used if neither is installed.
+- The installer now creates the desktop shortcut by default.
+
 ## [0.9.2] - 2026-10-12
 
 A quieter, more ordinary-looking interface.

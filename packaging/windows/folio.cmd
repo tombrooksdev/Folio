@@ -27,16 +27,7 @@ if /i "%CMD%"=="stop"     goto :stop
 if /i "%CMD%"=="open"     goto :open
 if /i "%CMD%"=="add-user" goto :adduser
 if /i "%CMD%"=="reset-password" goto :resetpw
-if /i "%CMD%"=="backup"   goto 
-:resetpw
-if "%~2"=="" (
-  echo Usage: folio reset-password NAME
-  exit /b 1
-)
-"%NODE%" --disable-warning=ExperimentalWarning "%ROOT%\app\scripts\reset-password.js" "%~2"
-exit /b %errorlevel%
-
-:backup
+if /i "%CMD%"=="backup"   goto :backup
 if /i "%CMD%"=="config"   goto :config
 goto :usage
 
@@ -65,6 +56,14 @@ if "%~2"=="" (
   exit /b 1
 )
 "%NODE%" --disable-warning=ExperimentalWarning "%ROOT%\app\scripts\add-user.js" %2 %3 %4
+exit /b %errorlevel%
+
+:resetpw
+if "%~2"=="" (
+  echo Usage: folio reset-password NAME
+  exit /b 1
+)
+"%NODE%" --disable-warning=ExperimentalWarning "%ROOT%\app\scripts\reset-password.js" "%~2"
 exit /b %errorlevel%
 
 :backup

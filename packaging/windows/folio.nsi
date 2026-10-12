@@ -96,7 +96,7 @@ Section "Start menu shortcuts" SecStart
   CreateShortcut "$SMPROGRAMS\Folio\Uninstall Folio.lnk" "$INSTDIR\Uninstall.exe"
 SectionEnd
 
-Section /o "Desktop shortcut" SecDesktop
+Section "Desktop shortcut" SecDesktop
   SetShellVarContext all
   CreateShortcut "$DESKTOP\Folio.lnk" "$WINDIR\System32\wscript.exe" '"$INSTDIR\Start Folio.vbs"' "" "" SW_SHOWNORMAL "" "Start Folio and open it in your browser"
 SectionEnd
