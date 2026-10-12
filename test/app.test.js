@@ -234,8 +234,10 @@ test('attachments: upload, serve safely, adopt pasted images, delete', async () 
   // deleting a page removes its attachments' files
   const mine = JSON.parse((await req(`/attachments?space=ENG&page=${pid}&name=doc.pdf`, { method: 'POST', raw: Buffer.from('%PDF') })).text);
   const n = readdirSync(uploadDir).length;
-  await req(`/p/${pid}/delete`, { method: 'POST' });
-  assert.equal(readdirSync(uploadDir).length, n - 1);
+  const gone = await req(`/p/${pid}/delete`, { method: 'POST' });
+  assert.equal(readdirSync(uploadDir).length, n); // the file waits in the trash in case the page is restored
+  await req(`/trash/${gone.loc.split('=')[1]}/delete`, { method: 'POST' });
+  assert.equal(readdirSync(uploadDir).length, n - 1); // and goes when the trash entry does
   assert.equal((await req(mine.url)).status, 404);
   close();
 });

@@ -190,6 +190,25 @@ try { // a toast queued before a page reload (e.g. after creating an issue on th
   if (queued) { sessionStorage.removeItem('folio-toast'); toast(queued.text, queued.url); }
 } catch {}
 
+// After a delete the server sends ?trashed=ID, and after a restore that renamed an issue ?note=...
+{
+  const u = new URL(location.href), tid = u.searchParams.get('trashed'), note = u.searchParams.get('note');
+  if (note) toast(note);
+  if (tid && /^\d+$/.test(tid) && toasts) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = '<span>Moved to the trash</span><button type="button" class="link-btn">Undo</button>';
+    el.querySelector('button').addEventListener('click', async () => {
+      const r = await fetch(`/trash/${tid}/restore`, { method: 'POST', headers: { 'X-Requested-With': 'fetch' } });
+      if (r.ok) location.href = r.url; else el.querySelector('span').textContent = 'Could not restore it';
+    });
+    toasts.append(el);
+    setTimeout(() => el.classList.add('out'), 12000);
+    setTimeout(() => el.remove(), 12400);
+  }
+  if (tid || note) { u.searchParams.delete('trashed'); u.searchParams.delete('note'); history.replaceState(null, '', u.pathname + u.search + u.hash); }
+}
+
 const createBtn = $('#create-btn'), createMenu = $('#create-menu'), issueDlg = $('#create-issue');
 const createEntry = menu('#create-btn', '#create-menu');
 function openIssueDialog() {

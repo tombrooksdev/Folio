@@ -310,7 +310,7 @@ export function mountBoard(app, ctx) {
               ${watchButton(notifier, req.user, 'issue', i.id)}${req.user.role !== 'viewer' ? addToTasksButton('issue', i.id) : ''}
               <button type="button" class="ghost sm" data-toggle="add-child">${icon('subtask')}Add sub-task</button>
               <button type="button" class="ghost sm" data-toggle="add-link">${icon('link')}Link issue</button>
-              <form method="post" action="/i/${i.id}/delete" data-confirm="Delete this issue?${children.length ? ' Its sub-tasks become standalone issues.' : ''}"><button class="danger sm">${icon('trash')}Delete</button></form></div>
+              <form method="post" action="/i/${i.id}/delete" data-confirm="Move this issue to the trash? You can restore it for 30 days.${children.length ? ' Its sub-tasks become standalone issues.' : ''}"><button class="danger sm">${icon('trash')}Delete</button></form></div>
             <h3 class="j-h">Description</h3>
             <article class="doc">${i.description ? renderMarkdown(i.description) : '<p class="muted">Add a description by editing this issue.</p>'}</article>
             ${files.panel({ issue_id: i.id }, space)}
@@ -432,9 +432,9 @@ export function mountBoard(app, ctx) {
   app.post('/i/:id/delete', (req, res) => {
     const i = getIssue(req.params.id);
     if (!i) return res.status(404).send('No such issue');
-    files.purge({ issue_id: i.id });
-    tx(db, () => { logChange(db, i.id, i, null); db.prepare('DELETE FROM issues WHERE id = ?').run(i.id); });
-    res.redirect(`/s/${spaceById(i.space_id).key}/backlog`);
+    const space = spaceById(i.space_id);
+    const id = ctx.trash.trashIssue(i, space, req.user);
+    res.redirect(`/s/${space.key}/backlog?trashed=${id}`);
   });
   app.post('/i/:id/comment', (req, res) => {
     const i = getIssue(req.params.id);

@@ -48,6 +48,7 @@ Folio follows the conventions people already know from tools like Confluence and
 - **Templates** (meeting notes, decision record, runbook and more), **panels** (`> [!WARNING]`), page **labels**, **starred** and **recently viewed** pages
 - **Compare versions** with a line diff, and **draft autosave** so you never lose an edit
 - Export any page as `.md`
+- A **trash** in every space: deleted pages and issues can be restored for 30 days
 
 **Scrum**
 - A board and a backlog in every space
@@ -367,7 +368,7 @@ Folio was audited and hardened in v0.9.0. In short:
 - **GitHub:** read-only, and restricted to `/repos/...` on `api.github.com`.
 - **Errors:** never show stack traces or file paths.
 
-Not included yet: two-factor sign-in, per-space permissions, and soft-delete for pages. See [SECURITY.md](SECURITY.md) for how to report a vulnerability privately and how to run Folio safely.
+Not included yet: two-factor sign-in and per-space permissions. See [SECURITY.md](SECURITY.md) for how to report a vulnerability privately and how to run Folio safely.
 
 ## Changelog
 

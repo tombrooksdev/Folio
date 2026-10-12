@@ -1,6 +1,6 @@
 {
   "name": "folio",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Self-hosted wiki: spaces, nested pages, Markdown, search, version history.",
   "type": "module",
   "private": true,

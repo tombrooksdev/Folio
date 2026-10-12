@@ -6,6 +6,19 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.11.0] - 2026-10-12
+
+### Added
+- **A recycle bin for pages and issues.** Deleting a page (with its child pages) or an issue now moves it to the space's **Trash**, and a toast offers **Undo**. Restoring brings back everything that went with it: versions, comments, labels, links, history and attached files. An issue restored into a running sprint puts its points back in scope. Entries are removed for good after 30 days; the person who deleted something, or an administrator, can delete it for good sooner, and administrators can empty the trash.
+- Trash is in each space's sidebar. Anyone can look; members and administrators can restore.
+
+### Changed
+- Deleting a page or issue no longer removes its attached files straight away. They stay on disk until the trash entry is deleted or expires.
+
+### Notes
+- If a page's parent was deleted in the meantime, the restored page returns to the top level. If an issue's number was taken by a newer issue, it comes back with the next free number and says so.
+- Tasks, task lists and spaces still delete immediately. A restored page does not get back other people's stars or watches.
+
 ## [0.10.1] - 2026-10-12
 
 Finishing Tasks.

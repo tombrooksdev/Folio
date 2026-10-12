@@ -75,6 +75,10 @@ export function createFiles({ db, uploadDir, maxBytes = 25 * 1048576, maxStorage
         <label class="dropzone" data-upload data-space="${esc(space.key)}" data-${col.replace('_', '-')}="${owner[col]}"><input type="file" multiple hidden>${icon('download')}<span>Drop files here or <u>browse</u></span></label>
       </section><script src="/files.js"></script>`;
     },
+    // Remove the stored files for attachment records that have already been taken out of the table (used by the trash).
+    discard(rows) {
+      for (const a of rows) rmSync(join(root, a.stored), { force: true });
+    },
     // Files on a task: a compact list for the Tasks detail pane. Uploading is done by the Tasks page script.
     taskPanel(task, back, { upload, canDelete }) {
       const rows = db.prepare('SELECT a.*, u.username FROM attachments a LEFT JOIN users u ON u.id = a.uploaded_by WHERE a.task_id = ? ORDER BY a.id').all(task.id);

@@ -16,6 +16,7 @@ import { TEMPLATES, findTemplate, fillTemplate } from './templates.js';
 import { diffLines, diffHtml } from './diff.js';
 import { parseLabels } from './issues.js';
 import { createNotifier, mountNotifications, unreadCount, watchButton } from './notify.js';
+import { createTrash, mountTrash } from './trash.js';
 import { mountTasks, addToTasksButton, capacityForm } from './tasks.js';
 import { mountLearn, checklistCard, hint, getFlag } from './learn.js';
 import { renderMarkdown, esc, layout, treeHtml, icon, hueClass, setKeyResolver, setMentionResolver, setAllowRemoteImages } from './render.js';
@@ -289,13 +290,17 @@ export function createApp(db, {
 
   const files = createFiles({ db, uploadDir, maxBytes: maxUploadMb * 1048576, maxStorageBytes: maxStorageMb * 1048576 });
   const notifier = createNotifier({ db, webhookUrl, publicUrl, fetchFn });
-  const ctx = { db, page: (res, o) => page(res, o), getSpace: (k) => getSpace(k), files, github, notifier };
+  const trash = createTrash({ db, files });
+  trash.purgeExpired();
+  setInterval(() => trash.purgeExpired(), 864e5).unref();
+  const ctx = { db, page: (res, o) => page(res, o), getSpace: (k) => getSpace(k), files, github, notifier, trash };
   files.mount(app, ctx);
   mountBoard(app, ctx);
   mountComments(app, ctx);
   mountGithub(app, ctx);
   mountNotifications(app, ctx);
   mountLearn(app, ctx);
+  mountTrash(app, ctx);
   const tasks = mountTasks(app, ctx);
   app.locals.tasksTick = tasks.tick; // reminders and the morning digest; tests call it directly
   setInterval(() => { try { tasks.tick(); } catch (e) { console.error('tasks timer:', e.message); } }, 60e3).unref();
@@ -454,9 +459,8 @@ export function createApp(db, {
     const p = getPage(Number(req.params.id));
     if (!p) return res.status(404).send('No such page');
     const space = db.prepare('SELECT key FROM spaces WHERE id = ?').get(p.space_id);
-    files.purge({ page_id: p.id });
-    db.prepare('DELETE FROM pages WHERE id = ?').run(p.id); // children cascade
-    res.redirect(`/s/${space.key}`);
+    const id = trash.trashPage(p, req.user); // children go with it; Restore brings them all back
+    res.redirect(`/s/${space.key}?trashed=${id}`);
   });
   app.post('/p/:id/star', (req, res) => {
     const p = getPage(Number(req.params.id));
@@ -575,7 +579,7 @@ export function createApp(db, {
       <ul class="spaces">${spaces.map((s) => {
         const here = space && s.id === space.id;
         return `<li class="space${here ? ' here' : ''}"><a class="space-link" href="/s/${esc(s.key)}"><span class="mono-tile ${hueClass(s.key)}">${esc(s.key.slice(0, 1))}</span>${esc(s.name)}</a>${here
-          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><a class="nav-link sm-nav${section === 'issues' ? ' cur' : ''}" href="/s/${esc(s.key)}/issues">${icon('search')}Issues</a><a class="nav-link sm-nav${section === 'reports' ? ' cur' : ''}" href="/s/${esc(s.key)}/reports">${icon('chart')}Reports</a><a class="nav-link sm-nav${section === 'code' ? ' cur' : ''}" href="/s/${esc(s.key)}/code">${icon('branch')}Code</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/create${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
+          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><a class="nav-link sm-nav${section === 'issues' ? ' cur' : ''}" href="/s/${esc(s.key)}/issues">${icon('search')}Issues</a><a class="nav-link sm-nav${section === 'reports' ? ' cur' : ''}" href="/s/${esc(s.key)}/reports">${icon('chart')}Reports</a><a class="nav-link sm-nav${section === 'code' ? ' cur' : ''}" href="/s/${esc(s.key)}/code">${icon('branch')}Code</a><a class="nav-link sm-nav${section === 'trash' ? ' cur' : ''}" href="/s/${esc(s.key)}/trash">${icon('trash')}Trash</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/create${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
           : ''}</li>`;
       }).join('')}</ul>
       <p class="credit"><a href="/changelog" title="What's new">folio v${VERSION}</a> · by <a href="https://tombrooks.dev" target="_blank" rel="noopener">tombrooks.dev</a></p>`;
@@ -620,7 +624,7 @@ export function createApp(db, {
           </div>
           <div class="actions"><button>${icon('save')}Save page</button><a class="btn ghost" href="${existingId ? `/p/${existingId}` : `/s/${esc(space.key)}`}">Cancel</a></div>
         </form>
-        ${existingId ? `<form method="post" action="/p/${existingId}/delete" data-confirm="Delete this page and all its child pages?"><button class="danger">${icon('trash')}Delete page</button></form>` : ''}
+        ${existingId ? `<form method="post" action="/p/${existingId}/delete" data-confirm="Move this page and its child pages to the trash? You can restore them for 30 days."><button class="danger">${icon('trash')}Delete page</button></form>` : ''}
         <script src="/files.js"></script><script src="/editor.js"></script>`,
     });
   }

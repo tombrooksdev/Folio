@@ -144,4 +144,28 @@ test('attach a file to a task from the pane, see it, and delete it', { skip }, a
   await done();
 });
 
+test('deleting a page offers Undo, and Restore from the trash works', { skip }, async () => {
+  const { page, base, errors, done } = await session();
+  await page.goto(`${base}/`);
+  await page.evaluate(async () => {
+    await fetch('/spaces', { method: 'POST', body: new URLSearchParams({ name: 'Eng', key: 'ENG' }) });
+    await fetch('/s/ENG/pages', { method: 'POST', body: new URLSearchParams({ title: 'Doomed page', body: 'x' }) });
+  });
+  await page.goto(`${base}/p/1/edit`);
+  page.on('dialog', (d) => d.accept());
+  await page.click('text=Delete page');
+  await page.waitForURL(/\/s\/ENG$/); // the ?trashed param is tidied away from the address bar
+  await page.waitForSelector('.toast >> text=Moved to the trash');
+  await page.click('.toast button:has-text("Undo")');
+  await page.waitForURL(`${base}/p/1`);
+  assert.match(await page.textContent('h1'), /Doomed page/);
+  // and from the trash page
+  await page.goto(`${base}/p/1/edit`); await page.click('text=Delete page'); await page.waitForURL(/\/s\/ENG$/);
+  await page.goto(`${base}/s/ENG/trash`);
+  await page.click('text=Restore');
+  await page.waitForURL(`${base}/p/1`);
+  assert.deepEqual(errors, []);
+  await done();
+});
+
 test.after(async () => { await browser?.close(); });

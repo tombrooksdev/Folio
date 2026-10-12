@@ -16,5 +16,9 @@ Open an old version and choose **Compare with current**. Folio shows a line-by-l
 
 If you prefer the older version, choose **Restore this version**. The current text is saved to history first, so a restore can be undone too.
 
+## Deleted something by mistake?
+
+Deleting a page (and its child pages) or an issue moves it to the space's **Trash**, and a message offers **Undo** for a few seconds. After that, open **Trash** in the sidebar and choose **Restore**. Versions, comments, labels and files come back with it. Things stay in the trash for 30 days.
+
 > [!TIP]
 > Before a big rewrite, check the history is there, then write fearlessly.

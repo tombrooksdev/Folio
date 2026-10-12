@@ -206,6 +206,18 @@ export function openDb(file) {
       read_at TEXT
     );
     CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, read_at, id DESC);
+    -- Recycle bin: a snapshot of a deleted page (with its children) or issue, kept for 30 days.
+    CREATE TABLE IF NOT EXISTS trash (
+      id INTEGER PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('page','issue')),
+      space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      data TEXT NOT NULL,
+      deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      deleted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS trash_space ON trash(space_id, id DESC);
     -- Tasks: a personal and team to-do list (lists, tasks, steps, a per-day "My Day" and per-person reminders).
     CREATE TABLE IF NOT EXISTS task_lists (
       id INTEGER PRIMARY KEY,
