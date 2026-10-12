@@ -1,0 +1,171 @@
+[
+  {
+    "id": "getting-started",
+    "title": "Getting started",
+    "summary": "Find your way around and do your first real work in ten minutes.",
+    "audience": "Everyone",
+    "icon": "home",
+    "lessons": [
+      {
+        "id": "welcome",
+        "title": "Find your way around",
+        "minutes": 2
+      },
+      {
+        "id": "spaces",
+        "title": "Spaces and the sidebar",
+        "minutes": 2
+      },
+      {
+        "id": "first-page",
+        "title": "Write your first page",
+        "minutes": 3
+      },
+      {
+        "id": "first-issue",
+        "title": "Create your first issue",
+        "minutes": 3
+      },
+      {
+        "id": "search",
+        "title": "Find anything fast",
+        "minutes": 2
+      }
+    ]
+  },
+  {
+    "id": "docs",
+    "title": "Docs and knowledge",
+    "summary": "Write, organise and share pages the way you would in Confluence.",
+    "audience": "Writers",
+    "icon": "file",
+    "lessons": [
+      {
+        "id": "markdown",
+        "title": "Write with Markdown",
+        "minutes": 4
+      },
+      {
+        "id": "templates",
+        "title": "Start from a template",
+        "minutes": 2
+      },
+      {
+        "id": "organise",
+        "title": "Organise with the page tree",
+        "minutes": 3
+      },
+      {
+        "id": "attachments",
+        "title": "Images and attachments",
+        "minutes": 2
+      },
+      {
+        "id": "collaborate",
+        "title": "Comments and mentions",
+        "minutes": 2
+      },
+      {
+        "id": "history",
+        "title": "Version history and compare",
+        "minutes": 2
+      }
+    ]
+  },
+  {
+    "id": "sprints",
+    "title": "Plan and run a sprint",
+    "summary": "Backlog, epics, boards and reports, the way you would in Jira.",
+    "audience": "Teams",
+    "icon": "board",
+    "lessons": [
+      {
+        "id": "issues",
+        "title": "Issues, types and points",
+        "minutes": 3
+      },
+      {
+        "id": "epics",
+        "title": "Epics, sub-tasks and links",
+        "minutes": 3
+      },
+      {
+        "id": "plan",
+        "title": "Plan a sprint in the backlog",
+        "minutes": 3
+      },
+      {
+        "id": "board",
+        "title": "Work the board",
+        "minutes": 3
+      },
+      {
+        "id": "finish",
+        "title": "Complete a sprint and read the reports",
+        "minutes": 3
+      }
+    ]
+  },
+  {
+    "id": "github",
+    "title": "Connect GitHub",
+    "summary": "See commits and pull requests beside your issues.",
+    "audience": "Developers",
+    "icon": "branch",
+    "lessons": [
+      {
+        "id": "link",
+        "title": "Link a repository",
+        "minutes": 2
+      },
+      {
+        "id": "keys",
+        "title": "Issue keys in commits and pull requests",
+        "minutes": 2
+      }
+    ]
+  },
+  {
+    "id": "notifications",
+    "title": "Stay in the loop",
+    "summary": "Notifications, watching and mentions without the noise.",
+    "audience": "Everyone",
+    "icon": "bell",
+    "lessons": [
+      {
+        "id": "bell",
+        "title": "Notifications and watching",
+        "minutes": 3
+      },
+      {
+        "id": "settings",
+        "title": "Choose what you hear about",
+        "minutes": 2
+      }
+    ]
+  },
+  {
+    "id": "admin",
+    "title": "Run Folio",
+    "summary": "People, backups, updates and where your data lives.",
+    "audience": "Administrators",
+    "icon": "settings",
+    "lessons": [
+      {
+        "id": "people",
+        "title": "Add people",
+        "minutes": 2
+      },
+      {
+        "id": "data",
+        "title": "Backups and your data",
+        "minutes": 3
+      },
+      {
+        "id": "updates",
+        "title": "Updates and installing",
+        "minutes": 2
+      }
+    ]
+  }
+]

@@ -20,6 +20,8 @@ const allowed = {
 // Set by the app so "ENG-12" in text can become a link to the issue (returns the issue id, or null).
 let keyResolver = null;
 export const setKeyResolver = (fn) => { keyResolver = fn; };
+let mentionResolver = null; // (username) => boolean
+export const setMentionResolver = (fn) => { mentionResolver = fn; };
 
 const PANELS = { NOTE: ['note', 'Note'], INFO: ['info', 'Info'], TIP: ['tip', 'Tip'], SUCCESS: ['success', 'Success'], WARNING: ['warning', 'Warning'], IMPORTANT: ['warning', 'Important'], CAUTION: ['warning', 'Caution'] };
 
@@ -33,7 +35,7 @@ function panels(html) {
 
 // Turn issue keys in text (not inside links or code) into links.
 function linkKeys(html) {
-  if (!keyResolver) return html;
+  if (!keyResolver && !mentionResolver) return html;
   let skip = 0;
   return html.split(/(<[^>]*>)/).map((part) => {
     if (part.startsWith('<')) {
@@ -42,10 +44,12 @@ function linkKeys(html) {
       return part;
     }
     if (skip > 0) return part;
-    return part.replace(/\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g, (m, key, n) => {
-      const id = keyResolver(key, Number(n));
-      return id ? `<a class="issue-link" href="/i/${id}">${m}</a>` : m;
-    });
+    return part
+      .replace(/\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g, (m, key, n) => {
+        const id = keyResolver?.(key, Number(n));
+        return id ? `<a class="issue-link" href="/i/${id}">${m}</a>` : m;
+      })
+      .replace(/(^|[^\w@/])@([A-Za-z0-9._-]{1,32})/g, (m, pre, name) => (mentionResolver?.(name) ? `${pre}<span class="mention">@${name}</span>` : m));
   }).join('');
 }
 
@@ -98,11 +102,16 @@ const PATHS = {
   paperclip: 'M21 12.5l-8.5 8.5a5 5 0 01-7-7l9-9a3.3 3.3 0 014.7 4.7l-9 9a1.7 1.7 0 01-2.4-2.4l8.3-8.3',
   subtask: 'M6 3v8a4 4 0 004 4h8M15 11l4 4-4 4',
   star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z',
+  bell: 'M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 003.4 0',
+  eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 15a3 3 0 100-6 3 3 0 000 6z',
+  bulb: 'M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.9.7 1.5 1.6 1.5 2.6V17h4v-.5c0-1 .6-1.9 1.5-2.6A6 6 0 0012 3z',
+  settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
+  help: 'M9.1 9a3 3 0 115.8 1c-.6 1.3-2.4 1.7-2.9 3M12 17h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   logo: 'M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2zM14 3v6h6M8 13h8M8 17h5',
 };
 export const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${PATHS[name]}"/></svg>`;
 
-export function layout({ title, user, body, sidebar = '', toc = false, bare = false, spaces = [], people = [], spaceKey = '', editUrl = '' }) {
+export function layout({ title, user, body, sidebar = '', toc = false, bare = false, spaces = [], people = [], spaceKey = '', editUrl = '', unread = 0, tour = false }) {
   const initial = user ? esc(user.username.slice(0, 1).toUpperCase()) : '';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -111,7 +120,7 @@ export function layout({ title, user, body, sidebar = '', toc = false, bare = fa
 <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/style.css">
 <script src="/theme.js"></script></head>
-<body${spaceKey ? ` data-space="${esc(spaceKey)}"` : ''}${editUrl ? ` data-edit="${esc(editUrl)}"` : ''}>
+<body${spaceKey ? ` data-space="${esc(spaceKey)}"` : ''}${editUrl ? ` data-edit="${esc(editUrl)}"` : ''}${tour && !bare ? ' data-tour="1"' : ''}>
 <div class="progress" id="progress"></div>
 ${bare ? body : `<header class="top">
   <a class="brand" href="/">folio<i>.</i></a>
@@ -125,6 +134,14 @@ ${bare ? body : `<header class="top">
              <a role="menuitem" href="/#new-space">${icon('board')}<span>Space<small>A home for a team or project</small></span></a>
            </div></div>
          <button class="cmdk-btn ghost" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search pages</span><kbd>Ctrl K</kbd></button>
+         <div class="bell-wrap"><button class="icon-btn" type="button" id="bell" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">${icon('bell')}<span class="badge" id="bell-count"${unread ? '' : ' hidden'}>${unread > 99 ? '99+' : unread}</span></button><div class="bell-menu" id="bell-menu"></div></div>
+         <div class="help-wrap"><button class="icon-btn" type="button" id="help-btn" aria-label="Help" aria-haspopup="true" aria-expanded="false">${icon('help')}</button>
+           <div class="help-menu" id="help-menu" role="menu">
+             <a role="menuitem" href="/learn">${icon('bulb')}Learn Folio</a>
+             <button type="button" role="menuitem" data-tour-start>${icon('play')}Take the tour</button>
+             <button type="button" role="menuitem" data-shortcuts>${icon('edit')}Keyboard shortcuts<kbd>?</kbd></button>
+             <a role="menuitem" href="/changelog">${icon('file')}What's new</a>
+           </div></div>
          <div class="theme-wrap"><button class="icon-btn" type="button" id="theme" aria-label="Choose theme" aria-haspopup="true" aria-expanded="false">${icon('palette')}</button><div class="theme-menu" id="theme-menu" role="menu"></div></div>
          <span class="avatar" title="${esc(user.username)}">${initial}</span>
          <form method="post" action="/logout"><button class="ghost sm">Sign out</button></form>`
@@ -141,6 +158,7 @@ ${user && !bare ? createDialogs({ spaces, people, spaceKey }) : ''}
   <div class="cmdk-box"><input id="cmdk-input" placeholder="Search every page..." autocomplete="off"><div class="cmdk-list" id="cmdk-list"></div></div>
 </div>
 <script src="/app.js"></script>
+${user && !bare ? '<script src="/tour.js"></script>' : ''}
 </body></html>`;
 }
 

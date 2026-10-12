@@ -6,6 +6,28 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.8.0] - 2026-10-12
+
+A training area, a first-login tour, and notifications.
+
+### Added
+- **Learn**: a built-in training area with six short courses (23 lessons): getting started, docs and knowledge, planning and running a sprint, connecting GitHub, notifications, and running Folio. Progress is tracked per person, and lessons use the same panels and Markdown as the rest of the app.
+- **Practice space**: one click creates a safe space with sample pages, epics and a running sprint to experiment in, and one click removes it again.
+- **First-login tour**: new people get a short spotlight walkthrough of the sidebar, Create button, search, notifications, help and themes. Skip it any time and replay it from the Help menu.
+- **Getting-started checklist** on the home page that ticks itself off from real activity (take the tour, create a space, page and issue, start a sprint, add a teammate).
+- **Hints**: small dismissible tips on the board, backlog and editor, shown once per person.
+- **Help menu** (`?` in the top bar): Learn, replay the tour, keyboard shortcuts and What's new.
+- **Notifications**: a bell with an unread count, a dropdown of recent items, a full inbox (All / Unread), and mark-as-read. People are told about new pages, new issues, issues assigned to them, `@mentions`, sprints starting and completing, and changes and comments on pages and issues they watch.
+- **Watching**: you watch what you create, edit, comment on or are assigned, and can Watch or Unwatch any page or issue.
+- **Notification settings**: switch each type on or off per person, and enable browser desktop alerts.
+- **@mentions** in pages, issues and comments, highlighted in the text.
+- **Team webhook**: set `FOLIO_WEBHOOK_URL` to post new pages, new issues and sprint events to Slack, Mattermost, Discord or Microsoft Teams (and `FOLIO_PUBLIC_URL` to include links).
+- New tests for notifications, watching, preferences, the training area, the checklist, hints and the practice space.
+
+### Changed
+- A "Learn" link sits beside Home in the sidebar.
+- Quick edits made by dragging cards or changing a field also notify watchers; rapid successive edits to the same item are combined into one notification.
+
 ## [0.7.0] - 2026-10-12
 
 Installers for Windows and Linux.
@@ -150,7 +172,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/tombrooksdev/Folio/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/tombrooksdev/Folio/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/tombrooksdev/Folio/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/tombrooksdev/Folio/compare/v0.4.0...v0.5.0

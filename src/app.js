@@ -12,7 +12,9 @@ import { mountComments, commentsPanel, commentCount } from './comments.js';
 import { TEMPLATES, findTemplate, fillTemplate } from './templates.js';
 import { diffLines, diffHtml } from './diff.js';
 import { parseLabels } from './issues.js';
-import { renderMarkdown, esc, layout, treeHtml, icon, hueClass, setKeyResolver } from './render.js';
+import { createNotifier, mountNotifications, unreadCount, watchButton } from './notify.js';
+import { mountLearn, checklistCard, hint, getFlag } from './learn.js';
+import { renderMarkdown, esc, layout, treeHtml, icon, hueClass, setKeyResolver, setMentionResolver } from './render.js';
 
 const { version: VERSION } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
 const CHANGELOG = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
@@ -24,11 +26,16 @@ export function createApp(db, {
   uploadDir = new URL('../data/uploads', import.meta.url).pathname,
   maxUploadMb = 25,
   github = createGithub(),
+  webhookUrl = '',
+  publicUrl = '',
+  fetchFn = globalThis.fetch,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
   const keyStmt = db.prepare('SELECT i.id FROM issues i JOIN spaces s ON s.id = i.space_id WHERE s.key = ? AND i.num = ?');
   setKeyResolver((key, num) => keyStmt.get(key, num)?.id ?? null);
+  const userStmt = db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE');
+  setMentionResolver((name) => !!userStmt.get(name));
   app.use(express.static(new URL('../public', import.meta.url).pathname, { setHeaders: (res, f) => res.set('Cache-Control', f.endsWith('.woff2') ? 'public, max-age=31536000, immutable' : 'no-cache') }));
   app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 
@@ -56,6 +63,8 @@ export function createApp(db, {
       opts.spaces = db.prepare('SELECT key, name FROM spaces ORDER BY name').all();
       opts.people = db.prepare('SELECT id, username FROM users ORDER BY username').all();
       opts.spaceKey = opts.space?.key ?? '';
+      opts.unread = unreadCount(db, opts.user.id);
+      opts.tour = !getFlag(db, opts.user.id, 'tour');
     }
     res.send(layout(opts));
   };
@@ -109,11 +118,14 @@ export function createApp(db, {
   });
 
   const files = createFiles({ db, uploadDir, maxBytes: maxUploadMb * 1048576 });
-  const ctx = { db, page: (res, o) => page(res, o), getSpace: (k) => getSpace(k), files, github };
+  const notifier = createNotifier({ db, webhookUrl, publicUrl, fetchFn });
+  const ctx = { db, page: (res, o) => page(res, o), getSpace: (k) => getSpace(k), files, github, notifier };
   files.mount(app, ctx);
   mountBoard(app, ctx);
   mountComments(app, ctx);
   mountGithub(app, ctx);
+  mountNotifications(app, ctx);
+  mountLearn(app, ctx);
 
   // ---- spaces ----
   app.get('/', (req, res) => {
@@ -123,7 +135,7 @@ export function createApp(db, {
     const viewed = db.prepare('SELECT p.id, p.title, s.name space, v.at FROM page_views v JOIN pages p ON p.id = v.page_id JOIN spaces s ON s.id = p.space_id WHERE v.user_id = ? ORDER BY v.at DESC LIMIT 6').all(req.user.id);
     page(res, {
       title: 'Home', user: req.user,
-      body: `<div class="page-head"><div><span class="eyebrow">Workspace</span><h1 class="page-title">Spaces</h1></div>
+      body: `${checklistCard(db, req.user)}<div class="page-head"><div><span class="eyebrow">Workspace</span><h1 class="page-title">Spaces</h1></div>
           <a class="btn" href="#new-space">${icon('plus')}New space</a></div>
         <div class="list">${spaces.map((s) => `<a class="row-item" href="/s/${esc(s.key)}"><span class="key">${esc(s.key.slice(0, 3))}</span><span class="t">${esc(s.name)}</span><span class="s">${s.n} ${s.n === 1 ? 'page' : 'pages'}</span></a>`).join('')}</div>
         ${spaces.length ? '' : `<div class="empty">${emptyArt()}<h3>No spaces yet</h3><p>A space holds the pages for one team or project.</p></div>`}
@@ -197,6 +209,7 @@ export function createApp(db, {
       setPageLabels(Number(r.lastInsertRowid), req.body.labels);
       return Number(r.lastInsertRowid);
     });
+    notifier.pageCreated(getPage(id), space, req.user);
     res.redirect(`/p/${id}`);
   });
   app.get('/p/:id(\\d+)', (req, res) => {
@@ -217,6 +230,7 @@ export function createApp(db, {
           <div class="meta"><span class="chip">${icon('clock')}Updated ${esc(p.updated_at.slice(0, 16))} UTC</span>${author ? `<span class="chip">by ${esc(author)}</span>` : ''}<a class="chip" href="#comments">${commentCount(db, p.id)} comment${commentCount(db, p.id) === 1 ? '' : 's'}</a></div>
           <div class="actions">
             <a class="btn" href="/p/${p.id}/edit">${icon('edit')}Edit</a>
+            ${watchButton(notifier, req.user, 'page', p.id)}
             <form method="post" action="/p/${p.id}/star"><button class="ghost star${starred ? ' on' : ''}" aria-pressed="${starred}" title="${starred ? 'Remove from starred' : 'Add to starred'}">${icon('star')}${starred ? 'Starred' : 'Star'}</button></form>
             <a class="btn ghost" href="/s/${esc(space.key)}/create?parent=${p.id}">${icon('plus')}Child page</a>
             <a class="btn ghost" href="/p/${p.id}/history">${icon('clock')}History</a>
@@ -259,6 +273,7 @@ export function createApp(db, {
       files.adopt(p.space_id, { page_id: p.id }, req.body.body);
       if ('labels' in req.body) setPageLabels(p.id, req.body.labels);
     });
+    notifier.pageUpdated(getPage(p.id), db.prepare('SELECT * FROM spaces WHERE id = ?').get(p.space_id), req.user, p.body);
     res.redirect(`/p/${p.id}`);
   });
   app.post('/p/:id/delete', (req, res) => {
@@ -381,7 +396,7 @@ export function createApp(db, {
     const spaces = db.prepare('SELECT * FROM spaces ORDER BY name').all();
     const cur = currentId ? getPage(currentId) : null;
     const open = new Set(cur ? [cur.id, ...breadcrumbs(cur).map((c) => c.id)] : []);
-    return `<a class="nav-link${space ? '' : ' cur'}" href="/">${icon('home')}Home</a>
+    return `<a class="nav-link${space || section === 'notifications' ? '' : ' cur'}" href="/">${icon('home')}Home</a><a class="nav-link" href="/learn">${icon('bulb')}Learn</a>
       <div class="nav-label"><span>Spaces</span><a href="/#new-space" title="New space" aria-label="New space">${icon('plus')}</a></div>
       <ul class="spaces">${spaces.map((s) => {
         const here = space && s.id === space.id;
@@ -415,7 +430,7 @@ export function createApp(db, {
     const tb = (name, label, sep) => `${sep ? '<span class="sep"></span>' : ''}<button type="button" class="ghost" data-md="${name}" title="${label}" aria-label="${label}">${icon(name)}</button>`;
     page(res, {
       title: heading, user: req.user, space, current: existingId, toc: false,
-      body: `<span class="eyebrow">${esc(heading)}</span>
+      body: `${hint(db, req.user, 'editor', 'Paste or drop an image to attach it. Your work is saved in this browser as a draft while you type.')}<span class="eyebrow">${esc(heading)}</span>
         <form method="post" action="${action}" id="edit-form" data-upload-space="${esc(space.key)}"${existingId ? ` data-upload-page="${existingId}"` : ''}>
           <div class="draft-banner" id="draft-banner" hidden><span id="draft-text"></span><span class="spacer"></span><button type="button" class="ghost sm" id="draft-restore">Restore draft</button><button type="button" class="link-btn" id="draft-discard">Discard</button></div>
           <input class="title-input" name="title" value="${esc(p.title)}" placeholder="Page title" aria-label="Page title" required autofocus>

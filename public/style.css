@@ -537,3 +537,68 @@ table.diff tr.fold td{background:var(--sunken);color:var(--mute);text-align:cent
 .lane-head svg{transition:transform .15s var(--ease);transform:rotate(90deg)}
 .lane.collapsed .lane-head svg{transform:none}.lane.collapsed .board{display:none}
 .lane .column{min-height:4rem}
+
+/* ---------- notifications, help, hints ---------- */
+.bell-wrap,.help-wrap{position:relative}
+.badge{position:absolute;top:1px;right:0;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--accent);color:var(--accent-fg);font:700 .62rem/16px var(--sans);text-align:center;pointer-events:none}
+.bell-menu,.help-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:70;background:var(--surface);border:1px solid var(--line-2);border-radius:12px;box-shadow:0 20px 50px -12px rgb(0 0 0/.3);display:none}
+.bell-menu.open,.help-menu.open{display:block;animation:pop .14s var(--ease) both}
+.bell-menu{width:min(24rem,92vw)}
+.bell-head,.bell-foot{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.65rem .9rem}
+.bell-head{border-bottom:1px solid var(--line)}.bell-head form{margin:0}
+.bell-foot{border-top:1px solid var(--line);font-size:.82rem;flex-wrap:wrap}
+.bell-foot a{text-decoration:none;color:var(--fg-2)}.bell-foot a:hover{color:var(--accent)}
+.bell-list{max-height:22rem;overflow:auto}
+.note{display:flex;gap:.7rem;align-items:flex-start;padding:.7rem .9rem;text-decoration:none;color:var(--fg-2);border-bottom:1px solid var(--line);position:relative;transition:background .12s}
+.note:last-child{border-bottom:0}.note:hover{background:var(--sunken)}
+.note.unread{background:color-mix(in srgb,var(--accent) 7%,transparent);color:var(--fg)}
+.note.unread::before{content:"";position:absolute;left:.3rem;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--accent)}
+.note-body{display:grid;gap:.1rem;min-width:0}.note-text{font-size:.88rem;line-height:1.4;overflow-wrap:anywhere}.note-body .muted{font-size:.74rem}
+.note-page{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface);max-width:48rem}
+.note-page .empty{border:0}
+.help-menu{min-width:15rem;padding:.35rem}
+.help-menu>*{display:flex;align-items:center;gap:.7rem;width:100%;padding:.5rem .65rem;border:0;border-radius:6px;background:none;color:var(--fg);text-decoration:none;box-shadow:none;font:500 .88rem var(--sans);text-align:left}
+.help-menu>*:hover{background:var(--sunken);color:var(--fg)}.help-menu svg{color:var(--accent)}.help-menu kbd{margin-left:auto}
+.prefs{display:grid;gap:.4rem;max-width:36rem;margin:1rem 0}
+.pref{display:flex;gap:.8rem;align-items:flex-start;padding:.7rem .9rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer}
+.pref input{width:auto;margin-top:.25rem}.pref span{display:grid}.pref .muted{font-size:.82rem}
+button.on{color:var(--accent)!important;border-color:var(--accent)!important}
+.mention{padding:.02rem .3rem;border-radius:4px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.hint{display:flex;align-items:flex-start;gap:.7rem;margin:0 0 1rem;padding:.7rem .9rem;border-radius:8px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);font-size:.9rem;color:var(--fg-2)}
+.hint>svg{color:var(--accent);margin-top:.15rem}.hint>div{flex:1}.hint .icon-btn{width:24px;height:24px;margin:-.1rem -.2rem 0 0}.hint .icon-btn svg{transform:rotate(45deg)}
+.checklist{margin:0 0 1.6rem;padding:1.1rem 1.2rem;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.checklist header{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}
+.checklist h2{font:400 1.45rem var(--serif)}.checklist .bar{margin:.7rem 0}
+.checklist ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr));gap:.4rem .8rem}
+.checklist li{display:flex;align-items:center;gap:.6rem;font-size:.92rem}.checklist li.done{color:var(--mute);text-decoration:line-through}
+.tick{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line-2);font:600 .7rem var(--sans);color:var(--mute);flex:none}
+.tick svg{width:12px;height:12px;stroke-width:3}.tick.on,.checklist li.done .tick{background:var(--ok);border-color:var(--ok);color:#fff}
+.tick.sm{width:16px;height:16px;min-width:16px;aspect-ratio:1}.tick.sm svg{width:10px;height:10px}
+
+/* ---------- learn ---------- */
+.continue-card{display:grid;grid-template-columns:1fr auto;gap:.1rem .8rem;align-items:center;padding:1.1rem 1.3rem;border-radius:12px;background:var(--ink);color:var(--ink-fg);text-decoration:none;margin-bottom:1.4rem;transition:transform .2s var(--ease)}
+.continue-card:hover{transform:translateY(-2px)}
+.continue-card .eyebrow{grid-column:1;color:var(--accent)}.continue-card b{font:400 1.5rem var(--serif);grid-column:1}.continue-card .muted{grid-column:1;color:inherit;opacity:.7}.continue-card>svg{grid-column:2;grid-row:1/4;width:22px;height:22px}
+.continue-card.done{display:block}
+.course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr));gap:.9rem}
+.course-card{display:grid;gap:.4rem;align-content:start;padding:1.1rem;border:1px solid var(--line);border-radius:10px;background:var(--surface);text-decoration:none;color:var(--fg);transition:border-color .15s,transform .2s var(--ease)}
+.course-card:hover{border-color:var(--accent);transform:translateY(-2px)}.course-card>svg{width:22px;height:22px;color:var(--accent)}.course-card b{font:400 1.25rem var(--serif)}
+.course-card .small{font-size:.76rem}.course-card .bar{margin:.3rem 0 0;flex:none;width:100%}
+.practice{display:flex;justify-content:space-between;gap:1.5rem;align-items:center;flex-wrap:wrap;margin-top:1.6rem;padding:1.2rem;border:1px dashed var(--line-2);border-radius:12px}
+.practice h2{font:400 1.4rem var(--serif)}.practice p{margin:.2rem 0 0;max-width:34rem}
+.bar.wide{flex:none;width:100%;max-width:30rem;margin:.8rem 0 1.2rem}
+.prog{margin-left:auto;font-size:.74rem}
+.lesson-nav{margin:.1rem 0 .4rem .9rem!important;padding-left:.35rem!important;border-left:1px solid var(--line)}
+.lesson-nav a{display:flex;align-items:center;gap:.5rem;padding:.28rem .5rem;border-radius:6px;text-decoration:none;color:var(--mute);font-size:.84rem}
+.lesson-nav a:hover{background:var(--sunken);color:var(--fg)}.lesson-nav a.cur{background:var(--sunken);color:var(--fg);font-weight:600}
+.doc.lesson{max-width:44rem}
+.lesson-foot{display:flex;justify-content:space-between;align-items:center;max-width:44rem;margin:2rem 0 1rem;padding-top:1.2rem;border-top:1px solid var(--line)}.lesson-foot form{margin:0}
+
+/* ---------- tour ---------- */
+.tour{position:fixed;inset:0;z-index:300}
+.tour-block{position:absolute;inset:0}
+.tour-spot{position:fixed;border-radius:8px;box-shadow:0 0 0 9999px rgb(14 12 9/.62),0 0 0 2px var(--accent);transition:all .3s var(--ease);pointer-events:none}
+.tour-pop{position:fixed;width:min(340px,calc(100vw - 24px));padding:1.1rem 1.2rem;border-radius:12px;background:var(--surface);color:var(--fg);border:1px solid var(--line-2);box-shadow:0 24px 60px -12px rgb(0 0 0/.5);animation:pop .22s var(--ease) both}
+.tour-pop h3{font:400 1.45rem var(--serif);margin-bottom:.3rem}.tour-pop p{margin:0 0 1rem;color:var(--fg-2);font-size:.92rem;line-height:1.55}
+.tour-foot{display:flex;align-items:center;gap:.5rem}
+.tour-dots{display:flex;gap:.25rem}.tour-dots span{width:6px;height:6px;border-radius:50%;background:var(--line-2)}.tour-dots span.on{background:var(--accent)}

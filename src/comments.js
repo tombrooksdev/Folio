@@ -21,7 +21,7 @@ export function commentsPanel(db, page, user) {
     <form class="comment-form" method="post" action="/p/${page.id}/comments">${av(user.username)}<div><textarea name="body" rows="3" placeholder="Add a comment (Markdown)" aria-label="Comment" required></textarea><button class="sm">${icon('plus')}Comment</button></div></form></section>`;
 }
 
-export function mountComments(app, { db }) {
+export function mountComments(app, { db, notifier }) {
   app.post('/p/:id/comments', (req, res) => {
     const p = db.prepare('SELECT id FROM pages WHERE id = ?').get(Number(req.params.id));
     if (!p) return res.status(404).send('No such page');
@@ -33,6 +33,8 @@ export function mountComments(app, { db }) {
     }
     if (body) {
       const r = db.prepare('INSERT INTO page_comments (page_id, parent_id, author_id, body) VALUES (?, ?, ?, ?)').run(p.id, parent ? parent.parent_id ?? parent.id : null, req.user.id, body);
+      const replyTo = parent ? db.prepare('SELECT author_id FROM page_comments WHERE id = ?').get(parent.id)?.author_id : null;
+      notifier.pageComment(db.prepare('SELECT id, title FROM pages WHERE id = ?').get(p.id), req.user, body, replyTo);
       return res.redirect(`/p/${p.id}#c${r.lastInsertRowid}`);
     }
     res.redirect(`/p/${p.id}#comments`);

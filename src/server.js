@@ -11,6 +11,8 @@ const app = createApp(openDb(file), {
   uploadDir: process.env.FOLIO_UPLOAD_DIR ?? new URL('../data/uploads', import.meta.url).pathname,
   maxUploadMb: Number(process.env.FOLIO_MAX_UPLOAD_MB ?? 25),
   github: createGithub({ token: process.env.FOLIO_GITHUB_TOKEN ?? '' }),
+  webhookUrl: process.env.FOLIO_WEBHOOK_URL ?? '',
+  publicUrl: process.env.FOLIO_PUBLIC_URL ?? '',
 });
 if (process.env.FOLIO_TRUST_PROXY === '1') app.set('trust proxy', 1);
 

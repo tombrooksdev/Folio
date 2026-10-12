@@ -69,6 +69,12 @@ Folio copies what people actually use in Confluence and Jira and leaves out what
 - A **Development** panel on each issue lists the pull requests and commits that mention it
 - Folio never writes to GitHub, and never talks to anything but `api.github.com`
 
+**Learning and onboarding**
+- A built-in **Learn** area: six short courses (23 lessons) with progress tracking
+- A one-click **practice space** with sample pages, epics and a running sprint
+- A **first-login tour**, a self-ticking **getting-started checklist** and dismissible hints
+- **Notifications**: a bell, inbox, watching, `@mentions`, per-person settings, desktop alerts and an optional Slack / Teams / Discord webhook
+
 **Make it yours**
 - **11 built-in themes** (5 light, 6 dark), defaulting to the tombrooks.dev palette
 - Respects `prefers-reduced-motion`; keyboard accessible; a high-contrast theme is included
@@ -163,6 +169,8 @@ Folio is configured with environment variables.
 | `FOLIO_TRUST_PROXY` | `0` | Set to `1` when behind a reverse proxy so the real client IP is used for login throttling. |
 | `FOLIO_UPLOAD_DIR` | `./data/uploads` (`/data/uploads` in Docker) | Where attachments are stored. |
 | `FOLIO_MAX_UPLOAD_MB` | `25` | Largest attachment, in megabytes. |
+| `FOLIO_WEBHOOK_URL` | *(none)* | Optional Slack / Mattermost / Discord / Teams incoming-webhook URL. New pages, new issues and sprint events are posted there. |
+| `FOLIO_PUBLIC_URL` | *(none)* | The address people use to reach Folio (for example `https://wiki.example.com`), so webhook messages include links. |
 | `FOLIO_GITHUB_TOKEN` | *(none)* | Optional GitHub token. Public repos work without one; add it for private repos or to lift the 60 requests/hour limit. A fine-grained, read-only token is enough. |
 
 ## Deploying

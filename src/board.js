@@ -3,6 +3,8 @@ import { tx } from './db.js';
 import { esc, icon, renderMarkdown, hueClass } from './render.js';
 import { logChange, mountReports, sprintStats, burndownSvg } from './reports.js';
 import { mountEpics, epicsFor, epicsPanel } from './epics.js';
+import { hint } from './learn.js';
+import { watchButton } from './notify.js';
 import {
   TYPES, PRIORITIES, STATUSES, label, initial, issueKey, sum, pointsOf, parseLabels, setLabels,
   listIssues, getIssueFull, typeIco, prioIco, avatar, epicChip, card, row, crumbs, statusChip, progressBar,
@@ -12,7 +14,7 @@ import {
 const LINKS = { blocks: ['blocks', 'is blocked by'], relates: ['relates to', 'relates to'], duplicates: ['duplicates', 'is duplicated by'] };
 
 export function mountBoard(app, ctx) {
-  const { db, page, getSpace, files } = ctx;
+  const { db, page, getSpace, files, notifier } = ctx;
   mountReports(app, ctx);
   mountEpics(app, ctx);
   const getIssue = (id) => db.prepare('SELECT * FROM issues WHERE id = ?').get(Number(id));
@@ -68,7 +70,7 @@ export function mountBoard(app, ctx) {
     const group = ['assignee', 'epic'].includes(req.query.group) ? req.query.group : '';
     page(res, {
       title: `Board`, user: req.user, space, section: 'board', toc: false,
-      body: `<div class="jira">${crumbs(space, 'Board')}
+      body: `<div class="jira">${hint(db, req.user, 'board', 'Drag a card between columns to change its status. Use <b>Group by</b> for swimlanes and the avatars to see one person\'s work.')}${crumbs(space, 'Board')}
         <div class="j-head"><div><h1 class="page-title">${esc(space.key)} board</h1>
           <p class="j-sub"><b>${esc(sprint.name)}</b>${sprint.goal ? `<span class="goal">${icon('flag')}${esc(sprint.goal)}</span>` : ''}</p></div>
           <div class="actions"><span class="j-chip" title="Sprint ends ${esc(sprint.ends_at.slice(0, 10))}">${icon('clock')}${left >= 0 ? `${left} day${left === 1 ? '' : 's'} remaining` : `${-left} day${left === -1 ? '' : 's'} overdue`}</span>
@@ -113,7 +115,7 @@ export function mountBoard(app, ctx) {
     };
     page(res, {
       title: 'Backlog', user: req.user, space, section: 'backlog', toc: false,
-      body: `<div class="jira">${crumbs(space, 'Backlog')}
+      body: `<div class="jira">${hint(db, req.user, 'backlog', 'Create a sprint, <b>drag issues into it</b>, then press <b>Start sprint</b>. Drag within a list to set priority order.')}${crumbs(space, 'Backlog')}
         <div class="j-head"><h1 class="page-title">Backlog</h1><div class="actions"><a class="btn ghost" href="/s/${esc(space.key)}/issues">${icon('search')}Search issues</a><a class="btn ghost" href="/s/${esc(space.key)}/issues/new">${icon('plus')}Create issue</a></div></div>
         ${epicsPanel(space, epicsFor(db, space.id))}
         <form class="new-space" id="new-sprint" hidden method="post" action="/s/${esc(space.key)}/sprints">
@@ -182,6 +184,7 @@ export function mountBoard(app, ctx) {
     const started = db.prepare('SELECT started_at FROM sprints WHERE id = ?').get(s.id).started_at;
     for (const i of db.prepare('SELECT id, points, status FROM issues WHERE sprint_id = ?').all(s.id))
       db.prepare('INSERT INTO sprint_log (sprint_id, issue_id, scope_delta, done_delta, initial, at) VALUES (?, ?, ?, ?, 1, ?)').run(s.id, i.id, i.points ?? 0, i.status === 'done' ? i.points ?? 0 : 0, started);
+    notifier.sprintEvent(s, spaceById(s.space_id), req.user, 'started');
     res.redirect(`/s/${spaceById(s.space_id).key}/board`);
   });
   app.post('/sprints/:id/complete', (req, res) => {
@@ -192,6 +195,7 @@ export function mountBoard(app, ctx) {
       db.prepare("UPDATE issues SET sprint_id = NULL, status = 'todo' WHERE sprint_id = ? AND status != 'done'").run(s.id);
       db.prepare("UPDATE sprints SET state = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = ?").run(s.id);
     });
+    notifier.sprintEvent(s, spaceById(s.space_id), req.user, 'completed');
     res.redirect(`/s/${spaceById(s.space_id).key}/reports`);
   });
 
@@ -262,6 +266,7 @@ export function mountBoard(app, ctx) {
       logChange(db, newId, null, f);
       return newId;
     });
+    notifier.issueCreated(getIssue(id), space, req.user);
     if (req.get('X-Requested-With') === 'fetch') {
       const num = db.prepare('SELECT num FROM issues WHERE id = ?').get(id).num;
       return res.json({ id, key: `${space.key}-${num}`, url: `/i/${id}` });
@@ -300,6 +305,7 @@ export function mountBoard(app, ctx) {
           <div class="issue-main">
             <h1 class="issue-title">${esc(i.title)}</h1>
             <div class="actions"><a class="btn ghost sm" href="/i/${i.id}/edit">${icon('edit')}Edit</a>
+              ${watchButton(notifier, req.user, 'issue', i.id)}
               <button type="button" class="ghost sm" data-toggle="add-child">${icon('subtask')}Add sub-task</button>
               <button type="button" class="ghost sm" data-toggle="add-link">${icon('link')}Link issue</button>
               <form method="post" action="/i/${i.id}/delete" data-confirm="Delete this issue?${children.length ? ' Its sub-tasks become standalone issues.' : ''}"><button class="danger sm">${icon('trash')}Delete</button></form></div>
@@ -375,19 +381,23 @@ export function mountBoard(app, ctx) {
     else if (field === 'points') next.points = pointsOf(value);
     else if (field === 'labels') {
       const before = parseLabels(getIssueFull(db, i.id).label_list).join(', '), after = parseLabels(value).join(', ');
-      tx(db, () => { recordChanges(db, i.id, req.user.id, { labels: before }, { labels: after }); setLabels(db, i.id, value); db.prepare('UPDATE issues SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(i.id); });
+      let ch = [];
+      tx(db, () => { ch = recordChanges(db, i.id, req.user.id, { labels: before }, { labels: after }); setLabels(db, i.id, value); db.prepare('UPDATE issues SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(i.id); });
+      notifier.issueChanged(getIssue(i.id), space, req.user, ch);
       return res.redirect(`/i/${i.id}`);
     }
     else if (field === 'epic_id') next.epic_id = value && db.prepare('SELECT id FROM epics WHERE id = ? AND space_id = ?').get(Number(value), space.id) ? Number(value) : null;
     else if (field === 'assignee_id') next.assignee_id = value && db.prepare('SELECT id FROM users WHERE id = ?').get(Number(value)) ? Number(value) : null;
     else if (field === 'sprint_id') next.sprint_id = value && db.prepare("SELECT id FROM sprints WHERE id = ? AND space_id = ? AND state != 'closed'").get(Number(value), space.id) ? Number(value) : null;
     else return res.status(400).send('Bad field');
+    let ch = [];
     tx(db, () => {
       db.prepare('UPDATE issues SET status=?, type=?, priority=?, points=?, assignee_id=?, sprint_id=?, epic_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
         .run(next.status, next.type, next.priority, next.points, next.assignee_id, next.sprint_id, next.epic_id, i.id);
-      recordChanges(db, i.id, req.user.id, i, next);
+      ch = recordChanges(db, i.id, req.user.id, i, next);
       logChange(db, i.id, i, next);
     });
+    notifier.issueChanged(getIssue(i.id), space, req.user, ch);
     res.redirect(`/i/${i.id}`);
   });
   app.get('/i/:id/edit', (req, res) => {
@@ -405,14 +415,16 @@ export function mountBoard(app, ctx) {
     const f = saveFields(req.body, spaceById(i.space_id), i.id);
     if (!f) return res.status(400).send('Title required');
     const oldLabels = parseLabels(getIssueFull(db, i.id).label_list).join(', ');
+    let changes = [];
     tx(db, () => {
       db.prepare(`UPDATE issues SET title=?, description=?, type=?, priority=?, status=?, points=?, sprint_id=?, assignee_id=?, epic_id=?, parent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
         .run(f.title, f.description, f.type, f.priority, f.status, f.points, f.sprint_id, f.assignee_id, f.epic_id, f.parent_id, i.id);
-      recordChanges(db, i.id, req.user.id, { ...i, labels: oldLabels }, f);
+      changes = recordChanges(db, i.id, req.user.id, { ...i, labels: oldLabels }, f);
       setLabels(db, i.id, f.labels);
       files.adopt(i.space_id, { issue_id: i.id }, f.description);
       logChange(db, i.id, i, f);
     });
+    notifier.issueChanged(getIssue(i.id), spaceById(i.space_id), req.user, changes, changes.some((c) => c.field === 'description') ? f.description : '');
     res.redirect(`/i/${i.id}`);
   });
   app.post('/i/:id/delete', (req, res) => {
@@ -426,7 +438,10 @@ export function mountBoard(app, ctx) {
     const i = getIssue(req.params.id);
     if (!i) return res.status(404).send('No such issue');
     const body = (req.body.body ?? '').trim();
-    if (body) db.prepare('INSERT INTO comments (issue_id, author_id, body) VALUES (?, ?, ?)').run(i.id, req.user.id, body);
+    if (body) {
+      db.prepare('INSERT INTO comments (issue_id, author_id, body) VALUES (?, ?, ?)').run(i.id, req.user.id, body);
+      notifier.issueComment(i, spaceById(i.space_id), req.user, body);
+    }
     res.redirect(`/i/${i.id}`);
   });
 
@@ -443,6 +458,7 @@ export function mountBoard(app, ctx) {
       if (sprintId && !db.prepare("SELECT 1 FROM sprints WHERE id = ? AND space_id = ? AND state != 'closed'").get(sprintId, i.space_id))
         return res.status(400).json({ error: 'bad sprint' });
     }
+    let moved = [];
     tx(db, () => {
       // neighbours in the destination container, excluding the card being moved
       const peers = db.prepare(`SELECT id, rank FROM issues WHERE space_id = ? AND sprint_id IS ? AND id != ? ${hasStatus ? 'AND status = ?' : ''} ORDER BY rank, id`)
@@ -453,9 +469,10 @@ export function mountBoard(app, ctx) {
       else if (at === 0) rank = peers[0].rank - 1;
       else rank = (peers[at - 1].rank + peers[at].rank) / 2;
       db.prepare('UPDATE issues SET status = ?, sprint_id = ?, rank = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, sprintId, rank, i.id);
-      recordChanges(db, i.id, req.user.id, i, { status, sprint_id: sprintId });
+      moved = recordChanges(db, i.id, req.user.id, i, { status, sprint_id: sprintId });
       logChange(db, i.id, i, { sprint_id: sprintId, status, points: i.points });
     });
+    notifier.issueChanged(getIssue(i.id), spaceById(i.space_id), req.user, moved);
     res.json({ ok: true });
   });
 }

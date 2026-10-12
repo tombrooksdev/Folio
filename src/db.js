@@ -171,6 +171,33 @@ export function openDb(file) {
       at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (user_id, page_id)
     );
+    -- Small per-user state: finished the tour, dismissed hints, completed lessons, notification preferences.
+    CREATE TABLE IF NOT EXISTS user_flags (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL DEFAULT '1',
+      at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, key)
+    );
+    CREATE TABLE IF NOT EXISTS watchers (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK (kind IN ('issue','page')),
+      ref_id INTEGER NOT NULL,
+      PRIMARY KEY (user_id, kind, ref_id)
+    );
+    CREATE INDEX IF NOT EXISTS watchers_ref ON watchers(kind, ref_id);
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      ref TEXT,
+      text TEXT NOT NULL,
+      url TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      read_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, read_at, id DESC);
     CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
       title, body, content='pages', content_rowid='id', tokenize='porter unicode61'
     );

@@ -9,7 +9,8 @@ import { join } from 'node:path';
 
 async function boot(opts = {}) {
   const uploadDir = mkdtempSync(join(tmpdir(), 'folio-test-'));
-  const server = createApp(openDb(':memory:'), { uploadDir, ...opts }).listen(0);
+  const db = openDb(':memory:');
+  const server = createApp(db, { uploadDir, ...opts }).listen(0);
   server.unref();
   const base = `http://localhost:${server.address().port}`;
   let cookie = '';
@@ -23,7 +24,7 @@ async function boot(opts = {}) {
     if (sc) cookie = sc.split(';')[0];
     return { status: r.status, loc: r.headers.get('location'), text: await r.text(), headers: r.headers };
   };
-  return { req, uploadDir, close: () => server.close() };
+  return { req, uploadDir, db, close: () => server.close() };
 }
 
 test('setup, spaces, pages, history, search, sanitising', async () => {
@@ -410,5 +411,134 @@ test('board: swimlanes and the create dialog markup', async () => {
   assert.match(lanes, /class="board-head"/);
   const page = (await req('/s/ENG/board')).text;
   assert.match(page, /id="create-issue"/); assert.match(page, /data-create="issue"/); assert.match(page, /id="shortcuts"/);
+  close();
+});
+
+test('notifications: pages, issues, assignment, comments, mentions, prefs, watching', async () => {
+  const hooks = [];
+  const { req, close, db } = await boot({ webhookUrl: 'https://hooks.example/x', publicUrl: 'https://folio.example', fetchFn: async (url, o) => { hooks.push({ url, body: JSON.parse(o.body) }); return { ok: true }; } });
+  // admin tom + a second user sam (added directly, like the CLI would)
+  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } });
+  const { hashPassword } = await import('../src/auth.js');
+  db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('sam', hashPassword('longenough'));
+  const sam = db.prepare("SELECT id FROM users WHERE username = 'sam'").get().id;
+  const notes = (uid) => db.prepare('SELECT kind, text, url, read_at FROM notifications WHERE user_id = ? ORDER BY id').all(uid);
+  const tom = db.prepare("SELECT id FROM users WHERE username = 'tom'").get().id;
+
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const pid = (await req('/s/ENG/pages', { method: 'POST', form: { title: 'Runbook', body: 'Hi @sam please review' } })).loc.split('/')[2];
+  let n = notes(sam);
+  assert.equal(n.length, 1); assert.equal(n[0].kind, 'mention'); assert.match(n[0].text, /tom created the page "Runbook"/);
+  assert.equal(notes(tom).length, 0); // never notified about your own actions
+  assert.equal(hooks.length, 1); assert.match(hooks[0].body.text, /created the page "Runbook".*https:\/\/folio\.example\/p\//);
+
+  // sam's prefs: turn off new issues
+  db.prepare("INSERT INTO user_flags (user_id, key, value) VALUES (?, 'pref:issue_created', '0')").run(sam);
+  const iid = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Login bug', assignee_id: String(sam) } })).loc.split('/')[2];
+  n = notes(sam);
+  assert.equal(n.at(-1).kind, 'assigned'); assert.match(n.at(-1).text, /created ENG-1/); // assigned beats "new issue", which sam muted anyway
+
+  // update by watcher: sam is watching (assigned) -> hears about tom's status change; edits are coalesced
+  await req(`/i/${iid}/field`, { method: 'POST', form: { field: 'status', value: 'doing' } });
+  await req(`/i/${iid}/field`, { method: 'POST', form: { field: 'priority', value: 'high' } });
+  n = notes(sam);
+  assert.equal(n.filter((x) => x.kind === 'issue_updated').length, 1); // coalesced into one
+  // comment with mention
+  await req(`/i/${iid}/comment`, { method: 'POST', form: { body: 'Ping @sam here' } });
+  assert.ok(notes(sam).some((x) => x.kind === 'mention' && /Ping @sam/.test(x.text)));
+  // reassign
+  await req(`/i/${iid}/field`, { method: 'POST', form: { field: 'assignee_id', value: '' } });
+  assert.ok(notes(sam).some((x) => x.kind === 'issue_updated')); // sam still watches after being unassigned
+
+  // sprint events go to everyone but the actor
+  await req('/s/ENG/sprints', { method: 'POST', form: { name: 'S1' } });
+  const sprint = (await req('/s/ENG/backlog')).text.match(/data-sprint="(\d+)"/)[1];
+  await req(`/sprints/${sprint}/start`, { method: 'POST', form: { weeks: '1' } });
+  assert.ok(notes(sam).some((x) => x.kind === 'sprint' && /started S1/.test(x.text)));
+
+  // watching toggle + page comment flow
+  await req(`/p/${pid}/comments`, { method: 'POST', form: { body: 'Nice page' } });
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND kind = 'page_comment'").get(sam).n, 0); // sam does not watch this page
+  db.prepare("INSERT INTO watchers (user_id, kind, ref_id) VALUES (?, 'page', ?)").run(sam, pid);
+  await req(`/p/${pid}/comments`, { method: 'POST', form: { body: 'Second comment' } });
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND kind = 'page_comment'").get(sam).n, 1);
+  close();
+});
+
+test('notifications: tom sees his own inbox, marks read, follows links, saves prefs, toggles watch', async () => {
+  const { req, close, db } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } });
+  const { hashPassword } = await import('../src/auth.js');
+  db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('sam', hashPassword('pw-longenough'));
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const tom = db.prepare("SELECT id FROM users WHERE username = 'tom'").get().id, sam = db.prepare("SELECT id FROM users WHERE username = 'sam'").get().id;
+  db.prepare("INSERT INTO notifications (user_id, kind, actor_id, ref, text, url) VALUES (?, 'mention', ?, 'x', 'sam mentioned you in <b>ENG-1</b>', '/s/ENG/board')").run(tom, sam);
+  assert.match((await req('/')).text, /id="bell-count">1</);
+  const menu = (await req('/notifications/menu')).text;
+  assert.match(menu, /sam mentioned you in &lt;b&gt;ENG-1&lt;\/b&gt;/); // escaped
+  assert.match((await req('/notifications')).text, /Mark all as read/);
+  const id = menu.match(/notifications\/(\d+)\/go/)[1];
+  assert.equal((await req(`/notifications/${id}/go`)).loc, '/s/ENG/board');
+  assert.match((await req('/')).text, /id="bell-count" hidden>0</);
+  assert.equal(JSON.parse((await req('/notifications/count')).text).count, 0);
+
+  // preferences
+  await req('/settings/notifications', { method: 'POST', form: { mention: '1', assigned: '1' } });
+  assert.equal(db.prepare("SELECT value FROM user_flags WHERE user_id = ? AND key = 'pref:page_created'").get(tom).value, '0');
+  assert.equal(db.prepare("SELECT value FROM user_flags WHERE user_id = ? AND key = 'pref:mention'").get(tom).value, '1');
+  assert.match((await req('/settings/notifications')).text, /name="mention" value="1" checked/);
+
+  // watch toggle on a page
+  const pid = (await req('/s/ENG/pages', { method: 'POST', form: { title: 'P', body: 'x' } })).loc.split('/')[2];
+  assert.match((await req(`/p/${pid}`)).text, /Watching/); // creator auto-watches
+  await req(`/watch/page/${pid}`, { method: 'POST' });
+  assert.match((await req(`/p/${pid}`)).text, />\s*Watch\s*<span class="count">0/);
+  assert.equal((await req('/watch/page/99999', { method: 'POST' })).status, 404);
+  close();
+});
+
+test('learn: courses, lessons, progress, checklist, tour flag, hints, practice space', async () => {
+  const { req, close, db } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } });
+  assert.match((await req('/')).text, /data-tour="1"/); // first login shows the tour
+  assert.match((await req('/')).text, /Get started with Folio/);
+  assert.equal((await req('/me/flag', { method: 'POST', form: { key: 'tour' } })).status, 200);
+  assert.doesNotMatch((await req('/')).text, /data-tour="1"/);
+  assert.equal((await req('/me/flag', { method: 'POST', form: { key: 'evil:key' } })).status, 400);
+
+  const learn = (await req('/learn')).text;
+  assert.match(learn, /Learn Folio/); assert.match(learn, /Getting started/); assert.match(learn, /0 of 23 lessons complete/);
+  const lesson = (await req('/learn/getting-started/welcome')).text;
+  assert.match(lesson, /Find your way around/); assert.match(lesson, /Lesson 1 of 5/);
+  assert.match(lesson, /<span class="mention">|class="panel panel-tip"/); // panels render inside lessons
+  assert.equal((await req('/learn/getting-started/welcome/complete', { method: 'POST' })).loc, '/learn/getting-started/spaces');
+  assert.match((await req('/learn')).text, /1 of 23 lessons complete/);
+  assert.equal((await req('/learn/nope')).status, 404);
+  assert.equal((await req('/learn/docs/nope')).status, 404);
+
+  // every lesson file renders
+  const { COURSES } = await import('../src/learn.js');
+  for (const c of COURSES) for (const l of c.lessons) assert.equal((await req(`/learn/${c.id}/${l.id}`)).status, 200, `${c.id}/${l.id}`);
+
+  // checklist ticks itself
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  await req('/s/ENG/pages', { method: 'POST', form: { title: 'First', body: 'x' } });
+  const home = (await req('/')).text;
+  assert.match(home, /<li class="done"><span class="tick">[\s\S]*?Create a space/); assert.match(home, /<li class="done">[\s\S]*?Write your first page/);
+  // hints: shown once, then dismissed per user
+  assert.match((await req('/s/ENG/backlog')).text, /data-hint="backlog"/);
+  await req('/me/flag', { method: 'POST', form: { key: 'hint:backlog' } });
+  assert.doesNotMatch((await req('/s/ENG/backlog')).text, /data-hint="backlog"/);
+
+  // practice space: create, usable, doesn't count toward the checklist, can be removed
+  await req('/learn/sandbox', { method: 'POST' });
+  assert.match((await req('/s/PRACTICE/board')).text, /Practice sprint 1/);
+  assert.match((await req('/s/PRACTICE/board')).text, /Draw the welcome screen/);
+  await req('/learn/sandbox', { method: 'POST' }); // idempotent
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM spaces WHERE key = 'PRACTICE'").get().n, 1);
+  assert.match((await req('/learn')).text, /Remove it/);
+  await req('/learn/sandbox/delete', { method: 'POST' });
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM spaces WHERE key = 'PRACTICE'").get().n, 0);
+  assert.equal((await req('/s/PRACTICE/board')).status, 404);
   close();
 });

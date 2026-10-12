@@ -10,6 +10,11 @@ FOLIO_HOST=127.0.0.1
 # Largest attachment, in megabytes
 #FOLIO_MAX_UPLOAD_MB=25
 #
+# Post new pages, new issues and sprint events to a Slack / Mattermost / Discord / Teams channel
+#FOLIO_WEBHOOK_URL=
+# The address people use to reach Folio, so those messages include links
+#FOLIO_PUBLIC_URL=http://localhost:3000
+#
 # GitHub token for private repositories or higher rate limits (read-only scope is enough)
 #FOLIO_GITHUB_TOKEN=
 #

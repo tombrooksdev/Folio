@@ -122,6 +122,7 @@ Data is in `./data`. See the README for HTTPS and configuration.
 | `FOLIO_HOST` | `0.0.0.0` on Linux and Docker, `127.0.0.1` on Windows | `127.0.0.1` accepts connections from this computer only |
 | `FOLIO_MAX_UPLOAD_MB` | `25` | Largest attachment |
 | `FOLIO_GITHUB_TOKEN` | none | For private repos or a higher GitHub rate limit |
+| `FOLIO_WEBHOOK_URL`, `FOLIO_PUBLIC_URL` | none | Post team events to Slack, Teams, Discord or Mattermost |
 | `FOLIO_SECURE_COOKIES`, `FOLIO_TRUST_PROXY` | `0` | Set both to `1` behind an HTTPS reverse proxy |
 
 Linux: `/etc/folio/folio.env`. Windows: `C:\ProgramData\Folio\config.txt` (installed) or `data\config.txt` (portable).

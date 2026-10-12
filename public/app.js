@@ -230,3 +230,62 @@ addEventListener('keydown', (e) => {
   else if (e.key === '[') $('#side-toggle')?.click();
   else if (e.key === '?') $('#shortcuts')?.showModal();
 });
+
+// ---- Flags: dismiss hints and the checklist, remembered per user on the server ----
+const flag = (key, clear) => fetch('/me/flag', { method: 'POST', body: new URLSearchParams(clear ? { key, clear: '1' } : { key }) }).catch(() => {});
+document.addEventListener('click', (e) => {
+  const hintBtn = e.target.closest('[data-hint-dismiss]');
+  if (hintBtn) { const el = hintBtn.closest('[data-hint]'); flag(`hint:${el.dataset.hint}`); el.remove(); return; }
+  const f = e.target.closest('[data-flag]');
+  if (f) { flag(f.dataset.flag); if (f.dataset.remove) document.querySelector(f.dataset.remove)?.remove(); }
+});
+
+// ---- Help menu ----
+const helpBtn = $('#help-btn'), helpMenu = $('#help-menu');
+helpBtn?.addEventListener('click', (e) => { e.stopPropagation(); const o = !helpMenu.classList.contains('open'); helpMenu.classList.toggle('open', o); helpBtn.setAttribute('aria-expanded', o); });
+document.addEventListener('click', (e) => { if (!e.target.closest('.help-wrap')) helpMenu?.classList.remove('open'); });
+$$('[data-shortcuts]').forEach((b) => b.addEventListener('click', () => { helpMenu.classList.remove('open'); $('#shortcuts')?.showModal(); }));
+
+// ---- Notifications: bell, badge, polling, desktop alerts ----
+const bell = $('#bell'), bellMenu = $('#bell-menu'), bellCount = $('#bell-count');
+const setBadge = (n) => { if (!bellCount) return; bellCount.textContent = n > 99 ? '99+' : n; bellCount.hidden = !n; };
+async function loadBell() {
+  bellMenu.innerHTML = '<p class="muted pad">Loading...</p>';
+  bellMenu.innerHTML = await (await fetch('/notifications/menu')).text();
+  wireDesktopAlerts(bellMenu);
+}
+function wireDesktopAlerts(scope) {
+  scope.querySelectorAll('#desktop-alerts').forEach((b) => {
+    const ok = 'Notification' in window;
+    if (!ok) { b.hidden = true; return; }
+    if (Notification.permission === 'granted' && localStorage.getItem('folio-desktop-alerts') === '1') b.textContent = 'Desktop alerts are on';
+    b.addEventListener('click', async () => {
+      const p = await Notification.requestPermission();
+      try { localStorage.setItem('folio-desktop-alerts', p === 'granted' ? '1' : '0'); } catch {}
+      b.textContent = p === 'granted' ? 'Desktop alerts are on' : 'Alerts are blocked in your browser';
+    });
+  });
+}
+bell?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = !bellMenu.classList.contains('open');
+  bellMenu.classList.toggle('open', open); bell.setAttribute('aria-expanded', open);
+  if (open) loadBell();
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('.bell-wrap')) bellMenu?.classList.remove('open'); });
+wireDesktopAlerts(document);
+let seenNote = null;
+async function poll() {
+  try {
+    const r = await (await fetch('/notifications/count')).json();
+    setBadge(r.count);
+    if (seenNote === null) seenNote = r.latest?.id ?? 0; // first poll only sets the baseline, so old items never pop up
+    else if (r.latest && r.latest.id > seenNote) {
+      seenNote = r.latest.id;
+      toast(r.latest.text, r.latest.url);
+      let on = false; try { on = localStorage.getItem('folio-desktop-alerts') === '1'; } catch {}
+      if (on && 'Notification' in window && Notification.permission === 'granted' && document.hidden) new Notification('Folio', { body: r.latest.text });
+    }
+  } catch {}
+}
+if (bell) { poll(); setInterval(poll, 30000); }

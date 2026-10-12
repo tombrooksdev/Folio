@@ -11,6 +11,9 @@ services:
       FOLIO_TRUST_PROXY: "0"
       # Optional: lets the GitHub integration read private repos and avoids the 60 requests/hour anonymous limit.
       # FOLIO_GITHUB_TOKEN: ""
+      # Optional: post new pages, new issues and sprint events to Slack / Teams / Discord / Mattermost.
+      # FOLIO_WEBHOOK_URL: ""
+      # FOLIO_PUBLIC_URL: "https://wiki.example.com"
       # Largest attachment, in megabytes.
       # FOLIO_MAX_UPLOAD_MB: "25"
     healthcheck:

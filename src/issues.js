@@ -87,14 +87,17 @@ export function recordChanges(db, issueId, userId, before, after) {
     parent_id: (v) => (v ? `#${v}` : 'None'),
   };
   const insert = db.prepare('INSERT INTO issue_events (issue_id, user_id, field, old_value, new_value) VALUES (?, ?, ?, ?, ?)');
+  const changes = [];
+  const record = (field, a, b) => { insert.run(issueId, userId, field, a, b); changes.push({ field, from: a, to: b }); };
   for (const f of ['title', 'status', 'type', 'priority', 'points', 'assignee_id', 'sprint_id', 'epic_id', 'labels', 'parent_id']) {
     if (!(f in after)) continue;
     const a = before[f] ?? null, b = after[f] ?? null;
     if (String(a ?? '') === String(b ?? '')) continue;
     const fmt = pretty[f] ?? ((v) => (v == null || v === '' ? 'None' : String(v)));
-    insert.run(issueId, userId, f, fmt(a), fmt(b));
+    record(f, fmt(a), fmt(b));
   }
-  if ('description' in after && (before.description ?? '') !== (after.description ?? '')) insert.run(issueId, userId, 'description', null, null);
+  if ('description' in after && (before.description ?? '') !== (after.description ?? '')) record('description', null, null);
+  return changes;
 }
 export const logCreated = (db, issueId, userId) => db.prepare("INSERT INTO issue_events (issue_id, user_id, field) VALUES (?, ?, 'created')").run(issueId, userId);
 
