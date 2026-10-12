@@ -13,10 +13,10 @@ async function boot(opts = {}) {
   server.unref();
   const base = `http://localhost:${server.address().port}`;
   let cookie = '';
-  const req = async (path, { method = 'GET', form, raw } = {}) => {
+  const req = async (path, { method = 'GET', form, raw, headers = {} } = {}) => {
     const r = await fetch(base + path, {
       method, redirect: 'manual',
-      headers: { cookie, ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...(raw && { 'content-type': 'application/octet-stream' }) },
+      headers: { cookie, ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...(raw && { 'content-type': 'application/octet-stream' }), ...headers },
       body: raw ?? (form && new URLSearchParams(form)),
     });
     const sc = r.headers.get('set-cookie');
@@ -313,5 +313,102 @@ test('github: errors are shown, not thrown', async () => {
   const res = await req('/s/ENG/code');
   assert.equal(res.status, 502);
   assert.match(res.text, /rate limit/i);
+  close();
+});
+
+test('issues: sub-tasks, links, history, JSON create, key auto-linking, panels', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const mk = async (title, extra = {}) => (await req('/s/ENG/issues', { method: 'POST', form: { title, ...extra } })).loc.split('/')[2];
+  const parent = await mk('Parent story', { points: '5' });
+  const child = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Child task', parent_id: parent, back: `/i/${parent}` } })).loc;
+  assert.equal(child, `/i/${parent}`);
+  const kid = (await req('/s/ENG/issues?q=Child')).text.match(/href="\/i\/(\d+)"/)[1];
+  let view = (await req(`/i/${parent}`)).text;
+  assert.match(view, /Sub-tasks <span class="count">0\/1<\/span>/); assert.match(view, /Child task/);
+  assert.match((await req(`/i/${kid}`)).text, /ENG-1<\/a>/); // breadcrumb to the parent
+  // one level only: a sub-task cannot be a parent
+  const grand = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Grandchild', parent_id: kid } })).loc.split('/')[2];
+  assert.doesNotMatch((await req(`/i/${grand}`)).text, /Sub-task of/);
+
+  // links, shown with the right phrase on each side
+  const other = await mk('Other issue');
+  assert.equal((await req(`/i/${parent}/links`, { method: 'POST', form: { type: 'blocks', key: 'ENG-4' } })).loc, `/i/${parent}`);
+  assert.match((await req(`/i/${parent}`)).text, /<span class="link-phrase">blocks<\/span>/);
+  assert.match((await req(`/i/${other}`)).text, /<span class="link-phrase">is blocked by<\/span>/);
+  assert.equal((await req(`/i/${parent}/links`, { method: 'POST', form: { type: 'blocks', key: 'ENG-1' } })).status, 400); // self
+  assert.equal((await req(`/i/${parent}/links`, { method: 'POST', form: { type: 'blocks', key: 'NOPE-9' } })).status, 400);
+  const lid = (await req(`/i/${parent}`)).text.match(/\/links\/(\d+)\/delete/)[1];
+  await req(`/links/${lid}/delete`, { method: 'POST', form: { back: `/i/${parent}` } });
+  assert.match((await req(`/i/${parent}`)).text, /No linked issues/);
+
+  // history
+  await req(`/i/${parent}/field`, { method: 'POST', form: { field: 'status', value: 'doing' } });
+  await req(`/i/${parent}/field`, { method: 'POST', form: { field: 'points', value: '8' } });
+  view = (await req(`/i/${parent}`)).text;
+  assert.match(view, /created the issue/);
+  assert.match(view, /changed <b>Status<\/b> from <span class="ev-val">To do<\/span> to <span class="ev-val">In progress<\/span>/);
+  assert.match(view, /changed <b>Story points<\/b> from <span class="ev-val">5<\/span> to <span class="ev-val">8<\/span>/);
+
+  // JSON create for the Create dialog
+  const json = await req('/s/ENG/issues', { method: 'POST', form: { title: 'From dialog', type: 'bug' }, headers: { 'X-Requested-With': 'fetch' } });
+  assert.equal(json.status, 200);
+  assert.match(JSON.parse(json.text).key, /^ENG-\d+$/);
+
+  // key auto-linking and panels in Markdown
+  await req(`/i/${other}`, { method: 'POST', form: { title: 'Other issue', description: 'See ENG-1 and `ENG-1` and [ENG-1](http://x)\n\n> [!WARNING]\n> Careful here\n' } });
+  view = (await req(`/i/${other}`)).text;
+  assert.match(view, new RegExp(`<a class="issue-link" href="/i/${parent}">ENG-1</a> and <code>ENG-1</code>`)); // not inside code
+  assert.match(view, /class="panel panel-warning"><p class="panel-title">Warning<\/p><p>Careful here/);
+  close();
+});
+
+test('pages: templates, labels, stars, recently viewed, version diff', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'tom', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  assert.match((await req('/s/ENG/create')).text, /Meeting notes/);
+  const tpl = (await req('/s/ENG/new?template=meeting-notes')).text;
+  assert.match(tpl, new RegExp(`Meeting notes ${new Date().toISOString().slice(0, 10)}`)); assert.match(tpl, /Attendees:\*\* tom/);
+  assert.match((await req('/s/ENG/new?template=nope')).text, /placeholder="Page title"/); // unknown template = blank
+
+  const id = (await req('/s/ENG/pages', { method: 'POST', form: { title: 'Runbook', body: 'line one\nline two\nline three', labels: 'Ops, runbook ops' } })).loc.split('/')[2];
+  let view = (await req(`/p/${id}`)).text;
+  assert.match(view, /href="\/s\/ENG\/labels\/ops"/); assert.match(view, /href="\/s\/ENG\/labels\/runbook"/);
+  assert.match((await req('/s/ENG/labels/ops')).text, /Runbook/);
+
+  await req(`/p/${id}/star`, { method: 'POST' });
+  let home = (await req('/')).text;
+  assert.match(home, /<h2>Starred<\/h2>/); assert.match(home, /<h2>Recently viewed<\/h2>/);
+  await req(`/p/${id}/star`, { method: 'POST' });
+  assert.doesNotMatch((await req('/')).text, /<h2>Starred<\/h2>/);
+
+  await req(`/p/${id}`, { method: 'POST', form: { title: 'Runbook v2', body: 'line one\nline TWO\nline three\nline four', labels: 'ops' } });
+  const vid = (await req(`/p/${id}/history`)).text.match(/history\/(\d+)/)[1];
+  const diff = (await req(`/p/${id}/diff?from=${vid}&to=current`)).text;
+  assert.match(diff, /<tr class="del"><td class="sign">-<\/td><td class="line">line two/);
+  assert.match(diff, /<tr class="add"><td class="sign">\+<\/td><td class="line">line TWO/);
+  assert.match(diff, /<tr class="add"><td class="sign">\+<\/td><td class="line">line four/);
+  assert.match(diff, /<del>Runbook<\/del> <ins>Runbook v2<\/ins>/);
+  assert.equal((await req(`/p/${id}/diff?from=99999`)).status, 404);
+  close();
+});
+
+test('board: swimlanes and the create dialog markup', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const id = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Lane test', assignee_id: '1', points: '2' } })).loc.split('/')[2];
+  await req('/s/ENG/sprints', { method: 'POST', form: { name: 'S1' } });
+  const sid = (await req('/s/ENG/backlog')).text.match(/data-sprint="(\d+)"/)[1];
+  await req(`/issues/${id}/move`, { method: 'POST', form: { sprint: sid, before: '' } });
+  await req(`/sprints/${sid}/start`, { method: 'POST', form: { weeks: '1' } });
+  assert.doesNotMatch((await req('/s/ENG/board')).text, /class="lane"/);
+  const lanes = (await req('/s/ENG/board?group=assignee')).text;
+  assert.match(lanes, /class="lane-head"[^>]*>[\s\S]*?a <span class="muted">\(1 issue\)/);
+  assert.match(lanes, /class="board-head"/);
+  const page = (await req('/s/ENG/board')).text;
+  assert.match(page, /id="create-issue"/); assert.match(page, /data-create="issue"/); assert.match(page, /id="shortcuts"/);
   close();
 });

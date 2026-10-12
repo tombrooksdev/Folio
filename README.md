@@ -25,6 +25,16 @@ Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both 
 - **Plan and run sprints** with a backlog, a drag-and-drop board and story points.
 - **Own it.** One Node process, one SQLite file, three runtime dependencies. Back it up by copying a file. Read the entire source in an afternoon.
 
+## Design principles
+
+Folio copies what people actually use in Confluence and Jira and leaves out what gets in the way:
+
+- **Familiar first.** Spaces, page trees, templates, panels and version history; backlog, board, sprints, epics, sub-tasks, links and a Create button. The shortcuts match Jira's.
+- **No configuration mazes.** No workflow editor, permission schemes, custom field screens or plugin marketplace. Three statuses, three issue types, three priorities. Everything works out of the box.
+- **Fast.** Server-rendered pages, a few kilobytes of JavaScript, SQLite. Every page loads instantly, and nothing spins.
+- **Yours.** One process, one data folder, no accounts with a vendor, no telemetry, no per-seat pricing.
+- **Readable.** The whole codebase is small enough to understand in an afternoon.
+
 ## Features
 
 **Wiki**
@@ -35,6 +45,8 @@ Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both 
 - Per-page "On this page" outline with scroll-spy, heading anchors, copy buttons on code blocks
 - **Attachments**: drop files on a page, or paste and drop images straight into the editor; images embed inline
 - **Page comments** with replies, and **move pages** between parents from the editor
+- **Templates** (meeting notes, decision record, runbook and more), **panels** (`> [!WARNING]`), page **labels**, **starred** and **recently viewed** pages
+- **Compare versions** with a line diff, and **draft autosave** so you never lose an edit
 - Export any page as `.md`
 
 **Scrum**
@@ -42,6 +54,9 @@ Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both 
 - Sprints: create, plan, start (1-4 weeks), complete (unfinished work returns to the backlog)
 - Issues: story / bug / task, priority, story points, assignee, Markdown description, attachments, comments
 - **Epics** with progress roll-up, and **labels**, filterable on the board, backlog and issue search
+- **Sub-tasks**, **issue links** (blocks, relates to, duplicates) and a full **history** of every change
+- **Swimlanes** on the board (group by assignee or epic)
+- A **Create** button with an issue dialog, and Jira-style **keyboard shortcuts**
 - **Issue search** by text, status, type, priority, assignee, epic, label and sprint
 - Drag and drop to reorder, move between sprints, and change status
 - Sprint progress with points done and days left, plus burndown, velocity and sprint history reports
@@ -218,7 +233,12 @@ Use your space key in commit messages, branch names or PR titles, for example `E
 
 | Keys | Action |
 |---|---|
-| <kbd>Ctrl</kbd>+<kbd>K</kbd> | Search every page |
+| <kbd>C</kbd> | Create an issue |
+| <kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>K</kbd> | Search every page |
+| <kbd>E</kbd> | Edit the current page or issue |
+| <kbd>G</kbd> then <kbd>H</kbd> / <kbd>B</kbd> / <kbd>L</kbd> / <kbd>I</kbd> | Go to home / board / backlog / issue search |
+| <kbd>[</kbd> | Show or hide the sidebar |
+| <kbd>?</kbd> | Show all shortcuts |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save (in the editor) |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>Ctrl</kbd>+<kbd>I</kbd> | Bold / italic (in the editor) |
 | <kbd>Esc</kbd> | Close the palette or theme menu |
@@ -274,8 +294,6 @@ See [CHANGELOG.md](CHANGELOG.md), also shown in the app at `/changelog` (click t
 
 - [ ] Roles and per-space permissions
 - [ ] Reorder pages within the tree
-- [ ] Page labels and templates
-- [ ] Issue links (blocks / relates to) and sub-tasks
 - [ ] Notifications and @mentions
 - [ ] REST API and webhooks
 

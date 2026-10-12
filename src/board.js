@@ -5,8 +5,11 @@ import { logChange, mountReports, sprintStats, burndownSvg } from './reports.js'
 import { mountEpics, epicsFor, epicsPanel } from './epics.js';
 import {
   TYPES, PRIORITIES, STATUSES, label, initial, issueKey, sum, pointsOf, parseLabels, setLabels,
-  listIssues, getIssueFull, typeIco, prioIco, avatar, epicChip, card, row, crumbs,
+  listIssues, getIssueFull, typeIco, prioIco, avatar, epicChip, card, row, crumbs, statusChip, progressBar,
+  recordChanges, logCreated, eventHtml,
 } from './issues.js';
+
+const LINKS = { blocks: ['blocks', 'is blocked by'], relates: ['relates to', 'relates to'], duplicates: ['duplicates', 'is duplicated by'] };
 
 export function mountBoard(app, ctx) {
   const { db, page, getSpace, files } = ctx;
@@ -23,6 +26,27 @@ export function mountBoard(app, ctx) {
       <input type="hidden" name="sprint_id" value="${sprintId ?? ''}"><input type="hidden" name="back" value="backlog">
       <select name="type" aria-label="Issue type">${TYPES.map((t) => `<option value="${t}">${label(t)}</option>`).join('')}</select>
       <input name="title" placeholder="What needs to be done?" aria-label="New issue title" required><button class="sm">Create</button></form>`;
+
+
+  // Board columns, optionally split into swimlanes (Jira's "Group by").
+  function boardHtml(issues, space, sprint, group) {
+    const columns = (items, headers) => `<div class="board">${STATUSES.map(([st, name]) => {
+      const col = items.filter((i) => i.status === st);
+      return `<section class="column${headers ? '' : ' headless'}">${headers ? `<header><h2>${name}</h2><span class="count" data-count>${col.length}</span><span class="pts" data-points-total>${sum(col)}</span></header>` : ''}
+        <div class="drop" data-drop data-status="${st}" data-sprint="${sprint.id}">${col.map((i) => card(i, space)).join('')}</div></section>`;
+    }).join('')}</div>`;
+    if (!group) return columns(issues, true);
+    const lanes = new Map();
+    for (const i of issues) {
+      const k = group === 'assignee' ? i.assignee ?? 'Unassigned' : i.epic_name ?? 'No epic';
+      if (!lanes.has(k)) lanes.set(k, []);
+      lanes.get(k).push(i);
+    }
+    const last = group === 'assignee' ? 'Unassigned' : 'No epic';
+    const names = [...lanes.keys()].sort((x, y) => (x === last) - (y === last) || x.localeCompare(y));
+    return `<div class="board-head">${STATUSES.map(([st, name]) => `<div>${name}<span class="count">${issues.filter((i) => i.status === st).length}</span></div>`).join('')}</div>
+      ${names.map((n) => `<section class="lane"><button type="button" class="lane-head" aria-expanded="true">${icon('chevron')}${esc(n)} <span class="muted">(${lanes.get(n).length} issue${lanes.get(n).length === 1 ? '' : 's'})</span></button>${columns(lanes.get(n), false)}</section>`).join('')}`;
+  }
 
   // ---- board ----
   app.get('/s/:key/board', (req, res) => {
@@ -41,6 +65,7 @@ export function mountBoard(app, ctx) {
     const left = Math.ceil((new Date(sprint.ends_at) - Date.now()) / 864e5);
     const people = users();
     const epics = epicsFor(db, space.id), labels = spaceLabels(space.id);
+    const group = ['assignee', 'epic'].includes(req.query.group) ? req.query.group : '';
     page(res, {
       title: `Board`, user: req.user, space, section: 'board', toc: false,
       body: `<div class="jira">${crumbs(space, 'Board')}
@@ -52,15 +77,12 @@ export function mountBoard(app, ctx) {
           <div class="av-filters" aria-label="Filter by assignee">${people.map((u) => `<button type="button" class="av-filter avatar ${hueClass(u.username)}" data-user="${esc(u.username)}" title="${esc(u.username)}" aria-pressed="false">${initial(u.username)}</button>`).join('')}</div>
           ${epics.length ? `<select id="epic-filter" class="j-select" aria-label="Filter by epic"><option value="">Epic</option>${epics.map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}</select>` : ''}
           ${labels.length ? `<select id="label-filter" class="j-select" aria-label="Filter by label"><option value="">Label</option>${labels.map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join('')}</select>` : ''}
+          <select id="group-by" class="j-select" aria-label="Group by"><option value="">Group: None</option><option value="assignee"${group === 'assignee' ? ' selected' : ''}>Group: Assignee</option><option value="epic"${group === 'epic' ? ' selected' : ''}>Group: Epic</option></select>
           <button type="button" class="link-btn" id="only-mine" data-me="${esc(req.user.username)}">Only my issues</button>
           <button type="button" class="link-btn" id="clear-filters" hidden>Clear filters</button>
           <span class="j-progress muted"><b>${done}</b> of <b>${total}</b> points done (${pct}%)</span></div>
         <details class="burndown"><summary>Burndown</summary><div class="chart-card">${burndownSvg(sprintStats(db, sprint))}</div><p><a href="/sprints/${sprint.id}/report">Full sprint report</a></p></details>
-        <div class="board">${STATUSES.map(([st, name]) => {
-          const col = issues.filter((i) => i.status === st);
-          return `<section class="column"><header><h2>${name}</h2><span class="count" data-count>${col.length}</span><span class="pts" data-points-total>${sum(col)}</span></header>
-            <div class="drop" data-drop data-status="${st}" data-sprint="${sprint.id}">${col.map((i) => card(i, space)).join('')}</div></section>`;
-        }).join('')}</div></div>
+        ${boardHtml(issues, space, sprint, group)}</div>
         <script src="/board.js"></script>`,
     });
   });
@@ -189,13 +211,14 @@ export function mountBoard(app, ctx) {
         <label>Sprint<select name="sprint_id"><option value="">Backlog</option>${sprints.map((s) => `<option value="${s.id}"${s.id === i.sprint_id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
         <label>Assignee<select name="assignee_id"><option value="">Unassigned</option>${users().map((u) => `<option value="${u.id}"${u.id === i.assignee_id ? ' selected' : ''}>${esc(u.username)}</option>`).join('')}</select></label>
         <label>Epic<select name="epic_id"><option value="">None</option>${epics.map((e) => `<option value="${e.id}"${e.id === i.epic_id ? ' selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label>
+        <label>Parent issue<select name="parent_id"><option value="">None (top level)</option>${db.prepare('SELECT id, num, title FROM issues WHERE space_id = ? AND parent_id IS NULL AND id != ? ORDER BY num').all(space.id, i.id ?? 0).map((p) => `<option value="${p.id}"${p.id === i.parent_id ? ' selected' : ''}>${esc(space.key)}-${p.num} ${esc(p.title.slice(0, 40))}</option>`).join('')}</select></label>
         <label>Labels<input name="labels" value="${esc(i.label_list ? i.label_list.split(',').join(', ') : '')}" placeholder="frontend, urgent"></label>
       </div>
       <label class="desc">Description <span class="muted">(Markdown; paste or drop images to attach them)</span><textarea name="description" id="issue-desc" rows="10" placeholder="What needs doing, and how will we know it's done?">${esc(i.description)}</textarea></label>
       <div class="actions"><button>${esc(heading)}</button><a class="btn ghost" href="${i.id ? `/i/${i.id}` : `/s/${esc(space.key)}/backlog`}">Cancel</a></div></form>
       <script src="/files.js"></script>`;
   }
-  const blank = { title: '', description: '', type: 'story', priority: 'medium', status: 'todo', points: null, sprint_id: null, assignee_id: null, epic_id: null, label_list: '' };
+  const blank = { title: '', description: '', type: 'story', priority: 'medium', status: 'todo', points: null, sprint_id: null, assignee_id: null, epic_id: null, parent_id: null, label_list: '' };
 
   app.get('/s/:key/issues/new', (req, res) => {
     const space = getSpace(req.params.key);
@@ -207,9 +230,12 @@ export function mountBoard(app, ctx) {
     });
   });
 
-  function saveFields(body, space) {
+  function saveFields(body, space, selfId = null) {
     const title = (body.title ?? '').trim();
     if (!title) return null;
+    // sub-tasks: one level only, same space, parent can't be the issue itself, and an issue with sub-tasks can't become one
+    let parent = body.parent_id ? db.prepare('SELECT id, parent_id FROM issues WHERE id = ? AND space_id = ?').get(Number(body.parent_id), space.id) : null;
+    if (parent && (parent.parent_id || parent.id === selfId || (selfId && db.prepare('SELECT 1 FROM issues WHERE parent_id = ?').get(selfId)))) parent = null;
     const sprintId = body.sprint_id ? Number(body.sprint_id) : null;
     const sprint = sprintId ? db.prepare("SELECT * FROM sprints WHERE id = ? AND space_id = ? AND state != 'closed'").get(sprintId, space.id) : null;
     const assignee = body.assignee_id ? db.prepare('SELECT id FROM users WHERE id = ?').get(Number(body.assignee_id)) : null;
@@ -217,7 +243,7 @@ export function mountBoard(app, ctx) {
     return {
       title, description: body.description ?? '', type: optional(body.type, TYPES), priority: PRIORITIES.includes(body.priority) ? body.priority : 'medium',
       status: STATUSES.some((s) => s[0] === body.status) ? body.status : 'todo', points: pointsOf(body.points),
-      sprint_id: sprint?.id ?? null, assignee_id: assignee?.id ?? null, epic_id: epic?.id ?? null, labels: body.labels ?? '',
+      sprint_id: sprint?.id ?? null, assignee_id: assignee?.id ?? null, epic_id: epic?.id ?? null, labels: parseLabels(body.labels).join(', '), parent_id: parent?.id ?? null,
     };
   }
   app.post('/s/:key/issues', (req, res) => {
@@ -228,14 +254,20 @@ export function mountBoard(app, ctx) {
     const id = tx(db, () => {
       const num = db.prepare('SELECT COALESCE(MAX(num), 0) + 1 n FROM issues WHERE space_id = ?').get(space.id).n;
       const rank = db.prepare('SELECT COALESCE(MAX(rank), 0) + 1 r FROM issues WHERE space_id = ?').get(space.id).r;
-      const newId = Number(db.prepare(`INSERT INTO issues (space_id, num, title, description, type, priority, status, points, sprint_id, assignee_id, epic_id, reporter_id, rank)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(space.id, num, f.title, f.description, f.type, f.priority, f.status, f.points, f.sprint_id, f.assignee_id, f.epic_id, req.user.id, rank).lastInsertRowid);
+      const newId = Number(db.prepare(`INSERT INTO issues (space_id, num, title, description, type, priority, status, points, sprint_id, assignee_id, epic_id, parent_id, reporter_id, rank)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(space.id, num, f.title, f.description, f.type, f.priority, f.status, f.points, f.sprint_id, f.assignee_id, f.epic_id, f.parent_id, req.user.id, rank).lastInsertRowid);
       setLabels(db, newId, f.labels);
+      logCreated(db, newId, req.user.id);
       files.adopt(space.id, { issue_id: newId }, f.description);
       logChange(db, newId, null, f);
       return newId;
     });
-    res.redirect(req.body.back === 'backlog' ? `/s/${space.key}/backlog` : `/i/${id}`);
+    if (req.get('X-Requested-With') === 'fetch') {
+      const num = db.prepare('SELECT num FROM issues WHERE id = ?').get(id).num;
+      return res.json({ id, key: `${space.key}-${num}`, url: `/i/${id}` });
+    }
+    const back = String(req.body.back ?? '');
+    res.redirect(back === 'backlog' ? `/s/${space.key}/backlog` : /^\/i\/\d+$/.test(back) ? back : `/i/${id}`);
   });
 
   app.get('/i/:id', (req, res) => {
@@ -246,22 +278,48 @@ export function mountBoard(app, ctx) {
     const name = (id) => all.find((u) => u.id === id)?.username;
     const sprints = db.prepare("SELECT * FROM sprints WHERE space_id = ? AND state != 'closed' ORDER BY id").all(space.id);
     const epics = epicsFor(db, space.id);
-    const comments = db.prepare('SELECT c.*, u.username FROM comments c LEFT JOIN users u ON u.id = c.author_id WHERE issue_id = ? ORDER BY c.id').all(i.id);
+    const children = listIssues(db, 'i.parent_id = ?', i.id);
+    const commentRows = db.prepare('SELECT c.*, u.username FROM comments c LEFT JOIN users u ON u.id = c.author_id WHERE issue_id = ? ORDER BY c.id').all(i.id);
+    const eventRows = db.prepare('SELECT e.*, u.username FROM issue_events e LEFT JOIN users u ON u.id = e.user_id WHERE issue_id = ? ORDER BY e.id').all(i.id);
+    const activity = [
+      ...commentRows.map((c) => ({ at: c.created_at, id: c.id, kind: 'comment', html: `<div class="comment" data-kind="comment">${avatar(c.username ?? '?')}<div><b>${esc(c.username ?? 'Deleted user')}</b> <span class="muted">${esc(c.created_at.slice(0, 16))} UTC</span><div class="doc">${renderMarkdown(c.body)}</div></div></div>` })),
+      ...eventRows.map((e) => ({ at: e.at, id: e.id, kind: 'history', html: `<div class="event" data-kind="history"><span class="ev-dot"></span><div>${eventHtml(e)} <span class="muted">${esc(e.at.slice(0, 16))} UTC</span></div></div>` })),
+    ].sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : x.kind === 'comment' ? 1 : -1));
+    const links = [
+      ...db.prepare('SELECT l.id lid, l.type link_type, 0 inbound, o.* FROM issue_links l JOIN issues o ON o.id = l.to_id WHERE l.from_id = ?').all(i.id),
+      ...db.prepare('SELECT l.id lid, l.type link_type, 1 inbound, o.* FROM issue_links l JOIN issues o ON o.id = l.from_id WHERE l.to_id = ?').all(i.id),
+    ].map((l) => ({ ...l, phrase: LINKS[l.link_type][l.inbound], key: `${spaceById(l.space_id).key}-${l.num}` }));
+    const phrases = [...new Set(links.map((l) => l.phrase))];
     const field = (fieldName, control) => `<form class="field-form" method="post" action="/i/${i.id}/field"><input type="hidden" name="field" value="${fieldName}">${control}</form>`;
     const select = (fieldName, opts, cur, cls = '') => field(fieldName, `<select name="value" class="${cls}" data-auto aria-label="${fieldName}">${opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(cur ?? '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`);
+    const doneKids = children.filter((c) => c.status === 'done').length;
     page(res, {
-      title: `${issueKey(i, space)} ${i.title}`, user: req.user, space, section: 'backlog', toc: false,
-      body: `<div class="jira">${crumbs(space, `<a href="/s/${esc(space.key)}/backlog">Backlog</a>`, esc(issueKey(i, space)))}
+      title: `${issueKey(i, space)} ${i.title}`, user: req.user, space, section: 'backlog', toc: false, editUrl: `/i/${i.id}/edit`,
+      body: `<div class="jira">${crumbs(space, `<a href="/s/${esc(space.key)}/backlog">Backlog</a>`, ...(i.parent_id ? [`<a href="/i/${i.parent_id}">${esc(space.key)}-${i.parent_num}</a>`] : []), esc(issueKey(i, space)))}
         <div class="issue-grid">
           <div class="issue-main">
             <h1 class="issue-title">${esc(i.title)}</h1>
             <div class="actions"><a class="btn ghost sm" href="/i/${i.id}/edit">${icon('edit')}Edit</a>
-              <form method="post" action="/i/${i.id}/delete" data-confirm="Delete this issue?"><button class="danger sm">${icon('trash')}Delete</button></form></div>
+              <button type="button" class="ghost sm" data-toggle="add-child">${icon('subtask')}Add sub-task</button>
+              <button type="button" class="ghost sm" data-toggle="add-link">${icon('link')}Link issue</button>
+              <form method="post" action="/i/${i.id}/delete" data-confirm="Delete this issue?${children.length ? ' Its sub-tasks become standalone issues.' : ''}"><button class="danger sm">${icon('trash')}Delete</button></form></div>
             <h3 class="j-h">Description</h3>
             <article class="doc">${i.description ? renderMarkdown(i.description) : '<p class="muted">Add a description by editing this issue.</p>'}</article>
             ${files.panel({ issue_id: i.id }, space)}
+            ${!i.parent_id ? `<section class="children"><h3 class="j-h">Sub-tasks ${children.length ? `<span class="count">${doneKids}/${children.length}</span>` : ''}</h3>
+              ${children.length ? `${progressBar(doneKids, children.length)}<div class="list">${children.map((c) => row(c, space, { drag: false })).join('')}</div>` : ''}
+              <form class="quick-add" id="add-child" hidden method="post" action="/s/${esc(space.key)}/issues">
+                <input type="hidden" name="parent_id" value="${i.id}"><input type="hidden" name="back" value="/i/${i.id}"><input type="hidden" name="epic_id" value="${i.epic_id ?? ''}">
+                <input name="title" placeholder="Sub-task summary" aria-label="Sub-task summary" required><button class="sm">Create</button></form></section>` : ''}
+            <section class="links"><h3 class="j-h">Linked issues</h3>
+              ${phrases.map((p) => `<div class="link-group"><span class="link-phrase">${esc(p)}</span><div class="list">${links.filter((l) => l.phrase === p).map((l) => `<div class="issue-row link-row">${typeIco(l.type)}<a class="ikey" href="/i/${l.id}">${esc(l.key)}</a><a class="ir-title" href="/i/${l.id}">${esc(l.title)}</a><span class="spacer"></span>${statusChip(l.status)}<form method="post" action="/links/${l.lid}/delete"><input type="hidden" name="back" value="/i/${i.id}"><button class="link-btn danger-text" aria-label="Remove link">${icon('trash')}</button></form></div>`).join('')}</div></div>`).join('')}
+              <form class="quick-add" id="add-link" hidden method="post" action="/i/${i.id}/links">
+                <select name="type" aria-label="Link type"><option value="blocks">blocks</option><option value="blocked_by">is blocked by</option><option value="relates">relates to</option><option value="duplicates">duplicates</option><option value="duplicated_by">is duplicated by</option></select>
+                <input name="key" placeholder="${esc(space.key)}-12" aria-label="Issue key" pattern="[A-Za-z][A-Za-z0-9]+-[0-9]+" required><button class="sm">Link</button></form>
+              ${phrases.length ? '' : '<p class="muted">No linked issues.</p>'}</section>
             <h3 class="j-h">Activity</h3>
-            <div class="comments">${comments.map((c) => `<div class="comment">${avatar(c.username ?? '?')}<div><b>${esc(c.username ?? 'Deleted user')}</b> <span class="muted">${esc(c.created_at.slice(0, 16))} UTC</span><div class="doc">${renderMarkdown(c.body)}</div></div></div>`).join('')}</div>
+            <div class="tabs mini" role="tablist"><button type="button" class="tab on" data-activity="all">All</button><button type="button" class="tab" data-activity="comment">Comments</button><button type="button" class="tab" data-activity="history">History</button></div>
+            <div class="activity" id="activity">${activity.map((a) => a.html).join('') || '<p class="muted">No activity yet.</p>'}</div>
             <form class="comment-form" method="post" action="/i/${i.id}/comment">${avatar(req.user.username)}<div><textarea name="body" rows="2" placeholder="Add a comment..." aria-label="Comment" required></textarea><button class="sm">Save</button></div></form>
           </div>
           <aside class="issue-side">
@@ -283,6 +341,27 @@ export function mountBoard(app, ctx) {
         </div></div>`,
     });
   });
+  // Link two issues (Jira-style: blocks / is blocked by / relates to / duplicates / is duplicated by).
+  app.post('/i/:id/links', (req, res) => {
+    const i = getIssue(req.params.id);
+    if (!i) return res.status(404).send('No such issue');
+    const m = /^([A-Za-z][A-Za-z0-9]+)-(\d+)$/.exec(String(req.body.key ?? '').trim());
+    const other = m && db.prepare('SELECT i.id FROM issues i JOIN spaces s ON s.id = i.space_id WHERE s.key = ? AND i.num = ?').get(m[1].toUpperCase(), Number(m[2]));
+    const t = String(req.body.type ?? '');
+    const swap = t === 'blocked_by' || t === 'duplicated_by';
+    const type = swap ? t.replace('blocked_by', 'blocks').replace('duplicated_by', 'duplicates') : t;
+    if (!other || other.id === i.id || !LINKS[type]) return res.status(400).send('Could not link: check the issue key');
+    const [from, to] = swap ? [other.id, i.id] : [i.id, other.id];
+    db.prepare('INSERT OR IGNORE INTO issue_links (from_id, to_id, type) VALUES (?, ?, ?)').run(from, to, type);
+    res.redirect(`/i/${i.id}`);
+  });
+  app.post('/links/:id/delete', (req, res) => {
+    const l = db.prepare('SELECT * FROM issue_links WHERE id = ?').get(Number(req.params.id));
+    if (!l) return res.status(404).send('No such link');
+    db.prepare('DELETE FROM issue_links WHERE id = ?').run(l.id);
+    const back = String(req.body.back ?? '');
+    res.redirect(/^\/i\/\d+$/.test(back) ? back : `/i/${l.from_id}`);
+  });
   // Inline single-field edits from the issue sidebar.
   app.post('/i/:id/field', (req, res) => {
     const i = getIssue(req.params.id);
@@ -294,7 +373,11 @@ export function mountBoard(app, ctx) {
     else if (field === 'type' && TYPES.includes(value)) next.type = value;
     else if (field === 'priority' && PRIORITIES.includes(value)) next.priority = value;
     else if (field === 'points') next.points = pointsOf(value);
-    else if (field === 'labels') { setLabels(db, i.id, value); db.prepare('UPDATE issues SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(i.id); return res.redirect(`/i/${i.id}`); }
+    else if (field === 'labels') {
+      const before = parseLabels(getIssueFull(db, i.id).label_list).join(', '), after = parseLabels(value).join(', ');
+      tx(db, () => { recordChanges(db, i.id, req.user.id, { labels: before }, { labels: after }); setLabels(db, i.id, value); db.prepare('UPDATE issues SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(i.id); });
+      return res.redirect(`/i/${i.id}`);
+    }
     else if (field === 'epic_id') next.epic_id = value && db.prepare('SELECT id FROM epics WHERE id = ? AND space_id = ?').get(Number(value), space.id) ? Number(value) : null;
     else if (field === 'assignee_id') next.assignee_id = value && db.prepare('SELECT id FROM users WHERE id = ?').get(Number(value)) ? Number(value) : null;
     else if (field === 'sprint_id') next.sprint_id = value && db.prepare("SELECT id FROM sprints WHERE id = ? AND space_id = ? AND state != 'closed'").get(Number(value), space.id) ? Number(value) : null;
@@ -302,6 +385,7 @@ export function mountBoard(app, ctx) {
     tx(db, () => {
       db.prepare('UPDATE issues SET status=?, type=?, priority=?, points=?, assignee_id=?, sprint_id=?, epic_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
         .run(next.status, next.type, next.priority, next.points, next.assignee_id, next.sprint_id, next.epic_id, i.id);
+      recordChanges(db, i.id, req.user.id, i, next);
       logChange(db, i.id, i, next);
     });
     res.redirect(`/i/${i.id}`);
@@ -318,11 +402,13 @@ export function mountBoard(app, ctx) {
   app.post('/i/:id', (req, res) => {
     const i = getIssue(req.params.id);
     if (!i) return res.status(404).send('No such issue');
-    const f = saveFields(req.body, spaceById(i.space_id));
+    const f = saveFields(req.body, spaceById(i.space_id), i.id);
     if (!f) return res.status(400).send('Title required');
+    const oldLabels = parseLabels(getIssueFull(db, i.id).label_list).join(', ');
     tx(db, () => {
-      db.prepare(`UPDATE issues SET title=?, description=?, type=?, priority=?, status=?, points=?, sprint_id=?, assignee_id=?, epic_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-        .run(f.title, f.description, f.type, f.priority, f.status, f.points, f.sprint_id, f.assignee_id, f.epic_id, i.id);
+      db.prepare(`UPDATE issues SET title=?, description=?, type=?, priority=?, status=?, points=?, sprint_id=?, assignee_id=?, epic_id=?, parent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(f.title, f.description, f.type, f.priority, f.status, f.points, f.sprint_id, f.assignee_id, f.epic_id, f.parent_id, i.id);
+      recordChanges(db, i.id, req.user.id, { ...i, labels: oldLabels }, f);
       setLabels(db, i.id, f.labels);
       files.adopt(i.space_id, { issue_id: i.id }, f.description);
       logChange(db, i.id, i, f);
@@ -367,6 +453,7 @@ export function mountBoard(app, ctx) {
       else if (at === 0) rank = peers[0].rank - 1;
       else rank = (peers[at - 1].rank + peers[at].rank) / 2;
       db.prepare('UPDATE issues SET status = ?, sprint_id = ?, rank = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, sprintId, rank, i.id);
+      recordChanges(db, i.id, req.user.id, i, { status, sprint_id: sprintId });
       logChange(db, i.id, i, { sprint_id: sprintId, status, points: i.points });
     });
     res.json({ ok: true });

@@ -156,3 +156,77 @@ document.querySelectorAll('[data-auto]').forEach((el) => el.addEventListener('ch
 document.querySelectorAll('[data-src]').forEach(async (el) => {
   try { const r = await fetch(el.dataset.src); el.innerHTML = r.ok ? await r.text() : ''; } catch { el.innerHTML = '<h3>Development</h3><p class="muted pad">Could not load.</p>'; }
 });
+
+// ---- Create menu, "Create issue" dialog, toasts ----
+const toasts = $('#toasts');
+function toast(text, url) {
+  if (!toasts) return;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span>${esc(text)}</span>${url ? `<a href="${esc(url)}">View</a>` : ''}`;
+  toasts.append(el);
+  setTimeout(() => el.classList.add('out'), 5000);
+  setTimeout(() => el.remove(), 5400);
+}
+try { // a toast queued before a page reload (e.g. after creating an issue on the board)
+  const queued = JSON.parse(sessionStorage.getItem('folio-toast') || 'null');
+  if (queued) { sessionStorage.removeItem('folio-toast'); toast(queued.text, queued.url); }
+} catch {}
+
+const createBtn = $('#create-btn'), createMenu = $('#create-menu'), issueDlg = $('#create-issue');
+const setMenu = (open) => { createMenu?.classList.toggle('open', open); createBtn?.setAttribute('aria-expanded', open); };
+createBtn?.addEventListener('click', (e) => { e.stopPropagation(); setMenu(!createMenu.classList.contains('open')); });
+document.addEventListener('click', (e) => { if (!e.target.closest('.create-wrap')) setMenu(false); });
+function openIssueDialog() {
+  if (!issueDlg) return;
+  setMenu(false);
+  if (!issueDlg.open) issueDlg.showModal();
+  issueDlg.querySelector('[name=title]').focus();
+}
+$$('[data-create=issue]').forEach((b) => b.addEventListener('click', openIssueDialog));
+$$('dialog.modal').forEach((d) => d.addEventListener('click', (e) => { if (e.target === d) d.close(); }));
+$$('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
+
+$('#create-issue-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget, data = new FormData(form), space = data.get('space');
+  data.delete('space');
+  const err = $('#ci-error');
+  err.hidden = true;
+  const res = await fetch(`/s/${encodeURIComponent(space)}/issues`, { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: new URLSearchParams(data) });
+  if (!res.ok) { err.textContent = (await res.text()) || 'Could not create the issue'; err.hidden = false; return; }
+  const made = await res.json();
+  const text = `${made.key} created`;
+  const another = $('#ci-another').checked;
+  if (another) { form.elements.title.value = ''; form.elements.description.value = ''; form.elements.title.focus(); } else issueDlg.close();
+  if (/\/(board|backlog|issues)$/.test(location.pathname)) {
+    try { sessionStorage.setItem('folio-toast', JSON.stringify({ text, url: made.url })); } catch {}
+    location.reload();
+  } else toast(text, made.url);
+});
+
+// ---- Activity tabs on an issue (All / Comments / History) ----
+$$('[data-activity]').forEach((b) => b.addEventListener('click', () => {
+  $$('[data-activity]').forEach((o) => o.classList.toggle('on', o === b));
+  $$('#activity [data-kind]').forEach((el) => { el.hidden = b.dataset.activity !== 'all' && el.dataset.kind !== b.dataset.activity; });
+}));
+
+// ---- Keyboard shortcuts (Jira-style) ----
+let chord = null;
+addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (e.ctrlKey || e.metaKey || e.altKey || t.closest?.('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
+  const space = document.body.dataset.space;
+  if (chord) {
+    const go = { h: '/', b: space && `/s/${space}/board`, l: space && `/s/${space}/backlog`, i: space && `/s/${space}/issues`, r: space && `/s/${space}/reports` }[e.key];
+    chord = null;
+    if (go) { e.preventDefault(); location.href = go; }
+    return;
+  }
+  if (e.key === 'g') { chord = true; setTimeout(() => (chord = null), 1500); }
+  else if (e.key === 'c' && issueDlg) { e.preventDefault(); openIssueDialog(); }
+  else if (e.key === '/' && $('#cmdk-open')) { e.preventDefault(); openPalette(); }
+  else if (e.key === 'e' && document.body.dataset.edit) location.href = document.body.dataset.edit;
+  else if (e.key === '[') $('#side-toggle')?.click();
+  else if (e.key === '?') $('#shortcuts')?.showModal();
+});

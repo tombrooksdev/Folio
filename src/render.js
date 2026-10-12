@@ -17,8 +17,40 @@ const allowed = {
   allowedSchemesByTag: { img: ['http', 'https'] },
 };
 
+// Set by the app so "ENG-12" in text can become a link to the issue (returns the issue id, or null).
+let keyResolver = null;
+export const setKeyResolver = (fn) => { keyResolver = fn; };
+
+const PANELS = { NOTE: ['note', 'Note'], INFO: ['info', 'Info'], TIP: ['tip', 'Tip'], SUCCESS: ['success', 'Success'], WARNING: ['warning', 'Warning'], IMPORTANT: ['warning', 'Important'], CAUTION: ['warning', 'Caution'] };
+
+// Confluence-style panels: "> [!INFO]" becomes a coloured callout. Runs after sanitising, on markup we generated ourselves.
+function panels(html) {
+  return html.replace(/<blockquote>\s*<p>\[!([A-Za-z]+)\][ \t]*(?:<br\s*\/?>)?\s*/g, (m, name) => {
+    const p = PANELS[name.toUpperCase()];
+    return p ? `<blockquote class="panel panel-${p[0]}"><p class="panel-title">${p[1]}</p><p>` : m;
+  });
+}
+
+// Turn issue keys in text (not inside links or code) into links.
+function linkKeys(html) {
+  if (!keyResolver) return html;
+  let skip = 0;
+  return html.split(/(<[^>]*>)/).map((part) => {
+    if (part.startsWith('<')) {
+      const tag = /^<\/?\s*([a-z0-9]+)/i.exec(part)?.[1]?.toLowerCase();
+      if (['a', 'code', 'pre'].includes(tag)) skip += part[1] === '/' ? -1 : 1;
+      return part;
+    }
+    if (skip > 0) return part;
+    return part.replace(/\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g, (m, key, n) => {
+      const id = keyResolver(key, Number(n));
+      return id ? `<a class="issue-link" href="/i/${id}">${m}</a>` : m;
+    });
+  }).join('');
+}
+
 export function renderMarkdown(src) {
-  return sanitizeHtml(marked.parse(src ?? ''), allowed);
+  return linkKeys(panels(sanitizeHtml(marked.parse(src ?? ''), allowed)));
 }
 
 export const esc = (s) =>
@@ -64,11 +96,13 @@ const PATHS = {
   equals: 'M5 9h14M5 15h14',
   branch: 'M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9',
   paperclip: 'M21 12.5l-8.5 8.5a5 5 0 01-7-7l9-9a3.3 3.3 0 014.7 4.7l-9 9a1.7 1.7 0 01-2.4-2.4l8.3-8.3',
+  subtask: 'M6 3v8a4 4 0 004 4h8M15 11l4 4-4 4',
+  star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z',
   logo: 'M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2zM14 3v6h6M8 13h8M8 17h5',
 };
 export const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${PATHS[name]}"/></svg>`;
 
-export function layout({ title, user, body, sidebar = '', toc = false, bare = false }) {
+export function layout({ title, user, body, sidebar = '', toc = false, bare = false, spaces = [], people = [], spaceKey = '', editUrl = '' }) {
   const initial = user ? esc(user.username.slice(0, 1).toUpperCase()) : '';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -77,13 +111,19 @@ export function layout({ title, user, body, sidebar = '', toc = false, bare = fa
 <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/style.css">
 <script src="/theme.js"></script></head>
-<body>
+<body${spaceKey ? ` data-space="${esc(spaceKey)}"` : ''}${editUrl ? ` data-edit="${esc(editUrl)}"` : ''}>
 <div class="progress" id="progress"></div>
 ${bare ? body : `<header class="top">
   <a class="brand" href="/">folio<i>.</i></a>
   ${
     user
       ? `<button class="icon-btn" type="button" id="side-toggle" aria-label="Toggle sidebar">${icon('sidebar')}</button>
+         <div class="create-wrap"><button class="create-btn" type="button" id="create-btn" aria-haspopup="true" aria-expanded="false">${icon('plus')}Create</button>
+           <div class="create-menu" id="create-menu" role="menu">
+             <button type="button" role="menuitem" data-create="issue">${icon('task')}<span>Issue<small>Story, bug or task</small></span><kbd>C</kbd></button>
+             <a role="menuitem" href="${spaces.length ? `/s/${esc(spaceKey || spaces[0].key)}/create` : '/#new-space'}">${icon('file')}<span>Page<small>From a template or blank</small></span></a>
+             <a role="menuitem" href="/#new-space">${icon('board')}<span>Space<small>A home for a team or project</small></span></a>
+           </div></div>
          <button class="cmdk-btn ghost" type="button" id="cmdk-open" aria-label="Search">${icon('search')}<span>Search pages</span><kbd>Ctrl K</kbd></button>
          <div class="theme-wrap"><button class="icon-btn" type="button" id="theme" aria-label="Choose theme" aria-haspopup="true" aria-expanded="false">${icon('palette')}</button><div class="theme-menu" id="theme-menu" role="menu"></div></div>
          <span class="avatar" title="${esc(user.username)}">${initial}</span>
@@ -96,11 +136,31 @@ ${bare ? body : `<header class="top">
   <main>${body}</main>
   ${sidebar && toc ? '<aside class="toc" id="toc" aria-label="On this page"></aside>' : ''}
 </div>`}
+${user && !bare ? createDialogs({ spaces, people, spaceKey }) : ''}
 <div class="cmdk" id="cmdk" role="dialog" aria-modal="true" aria-label="Search">
   <div class="cmdk-box"><input id="cmdk-input" placeholder="Search every page..." autocomplete="off"><div class="cmdk-list" id="cmdk-list"></div></div>
 </div>
 <script src="/app.js"></script>
 </body></html>`;
+}
+
+function createDialogs({ spaces, people, spaceKey }) {
+  const keys = [['C', 'Create an issue'], ['/', 'Search'], ['E', 'Edit this page or issue'], ['G then H', 'Go to home'], ['G then B', 'Go to the board'], ['G then L', 'Go to the backlog'], ['G then I', 'Go to issue search'], ['[', 'Show or hide the sidebar'], ['?', 'Show this help']];
+  return `<dialog class="modal" id="create-issue" aria-labelledby="ci-title">
+  <form method="dialog" class="modal-head"><h2 id="ci-title">Create issue</h2><button class="icon-btn" aria-label="Close">${icon('plus')}</button></form>
+  <form id="create-issue-form" class="modal-body">
+    <label>Space<select name="space" required>${spaces.map((s) => `<option value="${esc(s.key)}"${s.key === spaceKey ? ' selected' : ''}>${esc(s.name)} (${esc(s.key)})</option>`).join('')}</select></label>
+    <label>Issue type<select name="type"><option value="story">Story</option><option value="bug">Bug</option><option value="task">Task</option></select></label>
+    <label>Summary<input name="title" required autocomplete="off" placeholder="What needs to be done?"></label>
+    <label>Description<textarea name="description" rows="5" placeholder="Details (Markdown)"></textarea></label>
+    <div class="two"><label>Priority<select name="priority"><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select></label>
+      <label>Assignee<select name="assignee_id"><option value="">Unassigned</option>${people.map((u) => `<option value="${u.id}">${esc(u.username)}</option>`).join('')}</select></label></div>
+    <p class="err" id="ci-error" role="alert" hidden></p>
+    <div class="modal-foot"><label class="check"><input type="checkbox" id="ci-another"> Create another</label><span class="spacer"></span><button type="button" class="ghost" data-close>Cancel</button><button>Create</button></div>
+  </form></dialog>
+<dialog class="modal" id="shortcuts" aria-labelledby="sc-title"><form method="dialog" class="modal-head"><h2 id="sc-title">Keyboard shortcuts</h2><button class="icon-btn" aria-label="Close">${icon('plus')}</button></form>
+  <div class="modal-body"><dl class="keys">${keys.map(([k, d]) => `<dt>${k.split(' then ').map((x) => `<kbd>${x}</kbd>`).join(' then ')}</dt><dd>${d}</dd>`).join('')}</dl></div></dialog>
+<div class="toasts" id="toasts" aria-live="polite"></div>`;
 }
 
 export function treeHtml(nodes, currentId, open = new Set()) {

@@ -6,6 +6,33 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.6.0] - 2026-10-12
+
+Closer to Jira and Confluence, without the bloat.
+
+### Added
+- **Create** button in the top bar, like Jira's: a dialog for new issues (space, type, summary, description, priority, assignee, "Create another") with a confirmation toast, plus quick links to create a page or a space.
+- **Sub-tasks**: add them from the parent issue, see progress on the parent, and a parent chip on cards and rows.
+- **Issue links**: blocks / is blocked by / relates to / duplicates / is duplicated by, shown on both issues.
+- **Issue history**: every change to status, assignee, priority, points, sprint, epic, labels, summary and description is recorded. The Activity section has All / Comments / History tabs.
+- **Issue keys become links** everywhere Markdown is rendered (`ENG-12`), except inside code or existing links.
+- **Swimlanes** on the board: group by assignee or epic, with collapsible lanes.
+- **Panels** in Markdown, like Confluence's info and warning macros: `> [!INFO]`, `[!NOTE]`, `[!TIP]`, `[!SUCCESS]`, `[!WARNING]`.
+- **Page templates** and a "Create page" gallery: meeting notes, decision record, product requirements, retrospective, runbook, how-to guide, or blank.
+- **Compare versions**: a line diff between any saved version and the current page.
+- **Page labels**, with a page listing per label.
+- **Starred pages** and a **Recently viewed** list on the home page.
+- **Draft autosave** in the editor: unsaved work is kept in the browser and offered back after a crash or accidental navigation.
+- **Keyboard shortcuts**: `C` create issue, `/` search, `E` edit, `G` then `H` / `B` / `L` / `I` to navigate, `[` toggle the sidebar, `?` for help.
+- Parent issue picker on the issue form.
+
+### Changed
+- "Create page" in the sidebar and "Child page" open the template gallery.
+- Pages and issues expose an edit shortcut target to the keyboard handler.
+
+### Fixed
+- Cards and rows no longer nest links when showing parent keys.
+
 ## [0.5.0] - 2026-10-12
 
 Epics and labels, attachments and page comments, and a read-only GitHub integration.
@@ -105,7 +132,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/tombrooksdev/Folio/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/tombrooksdev/Folio/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tombrooksdev/Folio/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tombrooksdev/Folio/compare/v0.2.0...v0.3.0

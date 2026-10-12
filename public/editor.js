@@ -53,5 +53,28 @@ body.addEventListener('keydown', (e) => {
   if (mod && e.key === 'i') { e.preventDefault(); actions.italic(); }
   if (e.key === 'Tab') { e.preventDefault(); body.setRangeText('  ', body.selectionStart, body.selectionEnd, 'end'); }
 });
+// ---- draft autosave (like Confluence): keep unsaved work in this browser and offer to restore it ----
+const titleInput = form.elements.title;
+const key = `folio-draft:${location.pathname}`;
+const banner = document.getElementById('draft-banner');
+const save = () => { try { localStorage.setItem(key, JSON.stringify({ title: titleInput.value, body: body.value, at: Date.now() })); } catch {} };
+let draftTimer;
+const queueSave = () => { clearTimeout(draftTimer); draftTimer = setTimeout(save, 800); };
+body.addEventListener('input', queueSave);
+titleInput.addEventListener('input', () => { dirty = true; dot.classList.add('dirty'); queueSave(); });
+form.addEventListener('submit', () => { try { localStorage.removeItem(key); } catch {} });
+try {
+  const draft = JSON.parse(localStorage.getItem(key) || 'null');
+  if (draft && (draft.body !== body.value || draft.title !== titleInput.value)) {
+    document.getElementById('draft-text').textContent = `Unsaved draft from ${new Date(draft.at).toLocaleString()}`;
+    banner.hidden = false;
+    document.getElementById('draft-restore').addEventListener('click', () => {
+      titleInput.value = draft.title; body.value = draft.body; banner.hidden = true;
+      body.dispatchEvent(new Event('input'));
+    });
+    document.getElementById('draft-discard').addEventListener('click', () => { localStorage.removeItem(key); banner.hidden = true; });
+  }
+} catch {}
+
 count(); refresh();
 })();

@@ -9,7 +9,10 @@ import { mountBoard } from './board.js';
 import { createFiles } from './files.js';
 import { createGithub, mountGithub } from './github.js';
 import { mountComments, commentsPanel, commentCount } from './comments.js';
-import { renderMarkdown, esc, layout, treeHtml, icon, hueClass } from './render.js';
+import { TEMPLATES, findTemplate, fillTemplate } from './templates.js';
+import { diffLines, diffHtml } from './diff.js';
+import { parseLabels } from './issues.js';
+import { renderMarkdown, esc, layout, treeHtml, icon, hueClass, setKeyResolver } from './render.js';
 
 const { version: VERSION } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
 const CHANGELOG = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
@@ -24,6 +27,8 @@ export function createApp(db, {
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
+  const keyStmt = db.prepare('SELECT i.id FROM issues i JOIN spaces s ON s.id = i.space_id WHERE s.key = ? AND i.num = ?');
+  setKeyResolver((key, num) => keyStmt.get(key, num)?.id ?? null);
   app.use(express.static(new URL('../public', import.meta.url).pathname, { setHeaders: (res, f) => res.set('Cache-Control', f.endsWith('.woff2') ? 'public, max-age=31536000, immutable' : 'no-cache') }));
   app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 
@@ -46,7 +51,12 @@ export function createApp(db, {
 
   const userCount = () => db.prepare('SELECT COUNT(*) n FROM users').get().n;
   const page = (res, opts) => {
-    if (opts.user && opts.sidebar === undefined && !opts.bare) opts.sidebar = sidebar(opts.space ?? null, opts.current, opts.section);
+    if (opts.user && !opts.bare) {
+      if (opts.sidebar === undefined) opts.sidebar = sidebar(opts.space ?? null, opts.current, opts.section);
+      opts.spaces = db.prepare('SELECT key, name FROM spaces ORDER BY name').all();
+      opts.people = db.prepare('SELECT id, username FROM users ORDER BY username').all();
+      opts.spaceKey = opts.space?.key ?? '';
+    }
     res.send(layout(opts));
   };
   const setCookie = (res, token, maxAge) =>
@@ -109,12 +119,16 @@ export function createApp(db, {
   app.get('/', (req, res) => {
     const spaces = db.prepare('SELECT s.*, (SELECT COUNT(*) FROM pages WHERE space_id = s.id) n FROM spaces s ORDER BY name').all();
     const recent = db.prepare(`SELECT p.id, p.title, p.updated_at, s.name space FROM pages p JOIN spaces s ON s.id = p.space_id ORDER BY p.updated_at DESC, p.id DESC LIMIT 6`).all();
+    const starred = db.prepare('SELECT p.id, p.title, s.name space FROM page_stars st JOIN pages p ON p.id = st.page_id JOIN spaces s ON s.id = p.space_id WHERE st.user_id = ? ORDER BY p.title LIMIT 12').all(req.user.id);
+    const viewed = db.prepare('SELECT p.id, p.title, s.name space, v.at FROM page_views v JOIN pages p ON p.id = v.page_id JOIN spaces s ON s.id = p.space_id WHERE v.user_id = ? ORDER BY v.at DESC LIMIT 6').all(req.user.id);
     page(res, {
       title: 'Home', user: req.user,
       body: `<div class="page-head"><div><span class="eyebrow">Workspace</span><h1 class="page-title">Spaces</h1></div>
           <a class="btn" href="#new-space">${icon('plus')}New space</a></div>
         <div class="list">${spaces.map((s) => `<a class="row-item" href="/s/${esc(s.key)}"><span class="key">${esc(s.key.slice(0, 3))}</span><span class="t">${esc(s.name)}</span><span class="s">${s.n} ${s.n === 1 ? 'page' : 'pages'}</span></a>`).join('')}</div>
         ${spaces.length ? '' : `<div class="empty">${emptyArt()}<h3>No spaces yet</h3><p>A space holds the pages for one team or project.</p></div>`}
+        ${starred.length ? `<div class="section-head"><h2>Starred</h2></div><div class="list">${starred.map((r) => `<a class="row-item" href="/p/${r.id}">${icon('star')}<span class="t">${esc(r.title)}</span><span class="s">${esc(r.space)}</span></a>`).join('')}</div>` : ''}
+        ${viewed.length ? `<div class="section-head"><h2>Recently viewed</h2></div><div class="list">${viewed.map((r) => `<a class="row-item" href="/p/${r.id}">${icon('clock')}<span class="t">${esc(r.title)}</span><span class="s">${esc(r.space)} · ${esc(r.at.slice(0, 16))}</span></a>`).join('')}</div>` : ''}
         ${recent.length ? `<div class="section-head"><h2>Recently updated</h2></div>
         <div class="list">${recent.map((r) => `<a class="row-item" href="/p/${r.id}">${icon('file')}<span class="t">${esc(r.title)}</span><span class="s">${esc(r.space)} · ${esc(r.updated_at.slice(0, 16))}</span></a>`).join('')}</div>` : ''}
         <div class="section-head" id="new-space"><h2>Create a space</h2></div>
@@ -154,7 +168,20 @@ export function createApp(db, {
     const space = getSpace(req.params.key);
     if (!space) return res.status(404).send('No such space');
     const parent = req.query.parent ? getPage(Number(req.query.parent)) : null;
-    editorPage(req, res, space, { title: '', body: '', parent_id: parent?.id ?? '' }, `/s/${space.key}/pages`, 'New page');
+    const tpl = findTemplate(String(req.query.template ?? ''));
+    editorPage(req, res, space, { title: fillTemplate(tpl?.title ?? '', req.user.username), body: fillTemplate(tpl?.body ?? '', req.user.username), parent_id: parent?.id ?? '', label_list: '' }, `/s/${space.key}/pages`, 'New page');
+  });
+  // "Create page" gallery, like Confluence's template picker
+  app.get('/s/:key/create', (req, res) => {
+    const space = getSpace(req.params.key);
+    if (!space) return res.status(404).send('No such space');
+    const parent = req.query.parent && getPage(Number(req.query.parent))?.space_id === space.id ? `&parent=${Number(req.query.parent)}` : '';
+    page(res, {
+      title: 'Create page', user: req.user, space, section: 'create', toc: false,
+      body: `<nav class="crumbs"><a href="/">Spaces</a>${icon('chevron')}<a href="/s/${esc(space.key)}">${esc(space.name)}</a>${icon('chevron')}Create</nav>
+        <h1 class="page-title">Create a page</h1><p class="muted">Pick a template or start blank. You can change everything afterwards.</p>
+        <div class="template-grid">${TEMPLATES.map((t) => `<a class="template-card" href="/s/${esc(space.key)}/new?template=${t.id}${parent}">${icon(t.id === 'blank' ? 'file' : 'edit')}<b>${esc(t.name)}</b><span class="muted">${esc(t.desc)}</span></a>`).join('')}</div>`,
+    });
   });
   app.post('/s/:key/pages', (req, res) => {
     const space = getSpace(req.params.key);
@@ -167,6 +194,7 @@ export function createApp(db, {
       const r = db.prepare('INSERT INTO pages (space_id, parent_id, title, body, updated_by) VALUES (?, ?, ?, ?, ?)')
         .run(space.id, parentId, title, req.body.body ?? '', req.user.id);
       files.adopt(space.id, { page_id: Number(r.lastInsertRowid) }, req.body.body);
+      setPageLabels(Number(r.lastInsertRowid), req.body.labels);
       return Number(r.lastInsertRowid);
     });
     res.redirect(`/p/${id}`);
@@ -176,16 +204,21 @@ export function createApp(db, {
     if (!p) return res.status(404).send('No such page');
     const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(p.space_id);
     const crumbs = breadcrumbs(p);
+    db.prepare("INSERT INTO page_views (user_id, page_id) VALUES (?, ?) ON CONFLICT (user_id, page_id) DO UPDATE SET at = CURRENT_TIMESTAMP").run(req.user.id, p.id);
+    const starred = !!db.prepare('SELECT 1 FROM page_stars WHERE page_id = ? AND user_id = ?').get(p.id, req.user.id);
+    const labels = db.prepare('SELECT label FROM page_labels WHERE page_id = ? ORDER BY label').all(p.id).map((l) => l.label);
     const author = p.updated_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(p.updated_by)?.username : null;
     page(res, {
-      title: p.title, user: req.user, space, current: p.id, toc: true,
+      title: p.title, user: req.user, space, current: p.id, toc: true, editUrl: `/p/${p.id}/edit`,
       body: `<header class="article-head">
           <nav class="crumbs" aria-label="Breadcrumb"><a href="/s/${esc(space.key)}">${esc(space.name)}</a>${crumbs.map((c) => `${icon('chevron')}<a href="/p/${c.id}">${esc(c.title)}</a>`).join('')}</nav>
           <h1 class="page-title">${esc(p.title)}</h1>
+          ${labels.length ? `<div class="page-labels">${labels.map((l) => `<a class="label-chip" href="/s/${esc(space.key)}/labels/${encodeURIComponent(l)}">${esc(l)}</a>`).join('')}</div>` : ''}
           <div class="meta"><span class="chip">${icon('clock')}Updated ${esc(p.updated_at.slice(0, 16))} UTC</span>${author ? `<span class="chip">by ${esc(author)}</span>` : ''}<a class="chip" href="#comments">${commentCount(db, p.id)} comment${commentCount(db, p.id) === 1 ? '' : 's'}</a></div>
           <div class="actions">
             <a class="btn" href="/p/${p.id}/edit">${icon('edit')}Edit</a>
-            <a class="btn ghost" href="/s/${esc(space.key)}/new?parent=${p.id}">${icon('plus')}Child page</a>
+            <form method="post" action="/p/${p.id}/star"><button class="ghost star${starred ? ' on' : ''}" aria-pressed="${starred}" title="${starred ? 'Remove from starred' : 'Add to starred'}">${icon('star')}${starred ? 'Starred' : 'Star'}</button></form>
+            <a class="btn ghost" href="/s/${esc(space.key)}/create?parent=${p.id}">${icon('plus')}Child page</a>
             <a class="btn ghost" href="/p/${p.id}/history">${icon('clock')}History</a>
             <a class="btn ghost" href="/p/${p.id}.md">${icon('download')}Markdown</a>
             <button type="button" class="ghost width-toggle" id="width-toggle" aria-pressed="false">${icon('sidebar')}Readable width</button>
@@ -205,7 +238,7 @@ export function createApp(db, {
     const p = getPage(Number(req.params.id));
     if (!p) return res.status(404).send('No such page');
     const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(p.space_id);
-    editorPage(req, res, space, p, `/p/${p.id}`, 'Edit page', p.id);
+    editorPage(req, res, space, { ...p, label_list: db.prepare('SELECT label FROM page_labels WHERE page_id = ? ORDER BY label').all(p.id).map((l) => l.label).join(', ') }, `/p/${p.id}`, 'Edit page', p.id);
   });
   app.post('/p/:id(\\d+)', (req, res) => {
     const p = getPage(Number(req.params.id));
@@ -224,6 +257,7 @@ export function createApp(db, {
       db.prepare("UPDATE pages SET title = ?, body = ?, parent_id = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?")
         .run(title, req.body.body ?? '', parentId, req.user.id, p.id);
       files.adopt(p.space_id, { page_id: p.id }, req.body.body);
+      if ('labels' in req.body) setPageLabels(p.id, req.body.labels);
     });
     res.redirect(`/p/${p.id}`);
   });
@@ -234,6 +268,42 @@ export function createApp(db, {
     files.purge({ page_id: p.id });
     db.prepare('DELETE FROM pages WHERE id = ?').run(p.id); // children cascade
     res.redirect(`/s/${space.key}`);
+  });
+  app.post('/p/:id/star', (req, res) => {
+    const p = getPage(Number(req.params.id));
+    if (!p) return res.status(404).send('No such page');
+    const had = db.prepare('DELETE FROM page_stars WHERE page_id = ? AND user_id = ?').run(p.id, req.user.id).changes;
+    if (!had) db.prepare('INSERT INTO page_stars (page_id, user_id) VALUES (?, ?)').run(p.id, req.user.id);
+    res.redirect(`/p/${p.id}`);
+  });
+  app.get('/s/:key/labels/:label', (req, res) => {
+    const space = getSpace(req.params.key);
+    if (!space) return res.status(404).send('No such space');
+    const label = String(req.params.label).toLowerCase();
+    const pages = db.prepare('SELECT p.id, p.title, p.updated_at FROM pages p JOIN page_labels l ON l.page_id = p.id WHERE p.space_id = ? AND l.label = ? ORDER BY p.title').all(space.id, label);
+    page(res, {
+      title: `Label: ${label}`, user: req.user, space, toc: false,
+      body: `<span class="eyebrow">Label</span><h1 class="page-title"><span class="label-chip big">${esc(label)}</span></h1>
+        <div class="list">${pages.map((p) => `<a class="row-item" href="/p/${p.id}">${icon('file')}<span class="t">${esc(p.title)}</span><span class="s">${esc(p.updated_at.slice(0, 16))}</span></a>`).join('') || '<p class="muted pad">No pages have this label.</p>'}</div>`,
+    });
+  });
+  // Compare a saved version with the current page (or with another version): /p/1/diff?from=12&to=current
+  app.get('/p/:id/diff', (req, res) => {
+    const p = getPage(Number(req.params.id));
+    if (!p) return res.status(404).send('No such page');
+    const ver = (id) => db.prepare('SELECT * FROM versions WHERE id = ? AND page_id = ?').get(Number(id), p.id);
+    const from = ver(req.query.from);
+    const to = req.query.to && req.query.to !== 'current' ? ver(req.query.to) : { title: p.title, body: p.body, created_at: p.updated_at, current: true };
+    if (!from || !to) return res.status(404).send('No such version');
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(p.space_id);
+    page(res, {
+      title: `Compare: ${p.title}`, user: req.user, space, current: p.id, toc: false,
+      body: `<span class="eyebrow">Compare versions</span><h1 class="page-title"><a href="/p/${p.id}">${esc(p.title)}</a></h1>
+        <p class="muted">${esc(from.created_at.slice(0, 16))} UTC  to  ${to.current ? 'current version' : `${esc(to.created_at.slice(0, 16))} UTC`}</p>
+        ${from.title !== to.title ? `<p class="diff-title"><del>${esc(from.title)}</del> <ins>${esc(to.title)}</ins></p>` : ''}
+        ${diffHtml(diffLines(from.body, to.body))}
+        <div class="actions"><a class="btn ghost" href="/p/${p.id}/history">Back to history</a></div>`,
+    });
   });
   app.get('/p/:id/history', (req, res) => {
     const p = getPage(Number(req.params.id));
@@ -252,7 +322,7 @@ export function createApp(db, {
     page(res, {
       title: v.title, user: req.user, space: spaceOf(p), current: p.id,
       body: `<span class="eyebrow">Version from ${esc(v.created_at)} UTC</span><h1 class="page-title">${esc(v.title)}</h1>
-        <form method="post" action="/p/${p.id}/restore/${v.id}" class="actions"><button>Restore this version</button><a class="btn ghost" href="/p/${p.id}/history">Back</a></form>
+        <form method="post" action="/p/${p.id}/restore/${v.id}" class="actions"><button>Restore this version</button><a class="btn ghost" href="/p/${p.id}/diff?from=${v.id}&to=current">${icon('clock')}Compare with current</a><a class="btn ghost" href="/p/${p.id}/history">Back</a></form>
         <article class="doc">${renderMarkdown(v.body)}</article>`,
     });
   });
@@ -316,10 +386,14 @@ export function createApp(db, {
       <ul class="spaces">${spaces.map((s) => {
         const here = space && s.id === space.id;
         return `<li class="space${here ? ' here' : ''}"><a class="space-link" href="/s/${esc(s.key)}"><span class="mono-tile ${hueClass(s.key)}">${esc(s.key.slice(0, 1))}</span>${esc(s.name)}</a>${here
-          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><a class="nav-link sm-nav${section === 'issues' ? ' cur' : ''}" href="/s/${esc(s.key)}/issues">${icon('search')}Issues</a><a class="nav-link sm-nav${section === 'reports' ? ' cur' : ''}" href="/s/${esc(s.key)}/reports">${icon('chart')}Reports</a><a class="nav-link sm-nav${section === 'code' ? ' cur' : ''}" href="/s/${esc(s.key)}/code">${icon('branch')}Code</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/new${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
+          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><a class="nav-link sm-nav${section === 'issues' ? ' cur' : ''}" href="/s/${esc(s.key)}/issues">${icon('search')}Issues</a><a class="nav-link sm-nav${section === 'reports' ? ' cur' : ''}" href="/s/${esc(s.key)}/reports">${icon('chart')}Reports</a><a class="nav-link sm-nav${section === 'code' ? ' cur' : ''}" href="/s/${esc(s.key)}/code">${icon('branch')}Code</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/create${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
           : ''}</li>`;
       }).join('')}</ul>
       <p class="credit"><a href="/changelog" title="What's new">folio v${VERSION}</a> · by <a href="https://tombrooks.dev" target="_blank" rel="noopener">tombrooks.dev</a></p>`;
+  }
+  function setPageLabels(pageId, text) {
+    db.prepare('DELETE FROM page_labels WHERE page_id = ?').run(pageId);
+    for (const l of parseLabels(text)) db.prepare('INSERT INTO page_labels (page_id, label) VALUES (?, ?)').run(pageId, l);
   }
   function descendantIds(id) {
     return db.prepare('WITH RECURSIVE t(id) AS (SELECT ? UNION ALL SELECT p.id FROM pages p JOIN t ON p.parent_id = t.id) SELECT id FROM t').all(id).map((r) => r.id);
@@ -343,7 +417,9 @@ export function createApp(db, {
       title: heading, user: req.user, space, current: existingId, toc: false,
       body: `<span class="eyebrow">${esc(heading)}</span>
         <form method="post" action="${action}" id="edit-form" data-upload-space="${esc(space.key)}"${existingId ? ` data-upload-page="${existingId}"` : ''}>
+          <div class="draft-banner" id="draft-banner" hidden><span id="draft-text"></span><span class="spacer"></span><button type="button" class="ghost sm" id="draft-restore">Restore draft</button><button type="button" class="link-btn" id="draft-discard">Discard</button></div>
           <input class="title-input" name="title" value="${esc(p.title)}" placeholder="Page title" aria-label="Page title" required autofocus>
+          <input class="label-input" name="labels" value="${esc(p.label_list ?? '')}" placeholder="Labels, e.g. runbook, onboarding" aria-label="Labels">
           <div class="toolbar" role="toolbar" aria-label="Formatting">
             <label class="parent-pick">Parent <select name="parent_id" aria-label="Parent page">${parentOptions(space, existingId, p.parent_id)}</select></label><span class="sep"></span>
             ${tb('bold', 'Bold (Ctrl+B)')}${tb('italic', 'Italic (Ctrl+I)')}${tb('heading', 'Heading', true)}${tb('list', 'List')}${tb('quote', 'Quote')}${tb('code', 'Code')}${tb('link', 'Link', true)}<button type="button" class="ghost" id="attach-btn" title="Attach a file or image" aria-label="Attach a file or image">${icon('paperclip')}</button><input type="file" id="attach-input" multiple hidden>

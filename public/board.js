@@ -95,6 +95,17 @@ if (search) {
   });
 }
 
+// ---- swimlanes: choose grouping, collapse lanes ----
+document.getElementById('group-by')?.addEventListener('change', (e) => {
+  const u = new URL(location.href);
+  e.target.value ? u.searchParams.set('group', e.target.value) : u.searchParams.delete('group');
+  location.href = u;
+});
+$$('.lane-head').forEach((b) => b.addEventListener('click', () => {
+  const lane = b.closest('.lane');
+  b.setAttribute('aria-expanded', lane.classList.toggle('collapsed') ? 'false' : 'true');
+}));
+
 // ---- backlog: collapse sprints, show create forms ----
 $$('.collapse').forEach((b) => b.addEventListener('click', () => {
   const block = b.closest('.sprint-block');

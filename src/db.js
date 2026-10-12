@@ -136,6 +136,41 @@ export function openDb(file) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS page_comments_page ON page_comments(page_id, id);
+    CREATE TABLE IF NOT EXISTS issue_links (
+      id INTEGER PRIMARY KEY,
+      from_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+      to_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK (type IN ('blocks','relates','duplicates')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (from_id, to_id, type)
+    );
+    CREATE TABLE IF NOT EXISTS issue_events (
+      id INTEGER PRIMARY KEY,
+      issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      field TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS issue_events_issue ON issue_events(issue_id, id);
+    CREATE TABLE IF NOT EXISTS page_labels (
+      page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      label TEXT NOT NULL,
+      PRIMARY KEY (page_id, label)
+    );
+    CREATE INDEX IF NOT EXISTS page_labels_label ON page_labels(label);
+    CREATE TABLE IF NOT EXISTS page_stars (
+      page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (page_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS page_views (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, page_id)
+    );
     CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
       title, body, content='pages', content_rowid='id', tokenize='porter unicode61'
     );
@@ -152,6 +187,7 @@ export function openDb(file) {
   `);
   // Columns added after v0.4: older databases are upgraded in place.
   addColumn(db, 'issues', 'epic_id', 'INTEGER REFERENCES epics(id) ON DELETE SET NULL');
+  addColumn(db, 'issues', 'parent_id', 'INTEGER REFERENCES issues(id) ON DELETE SET NULL');
   addColumn(db, 'spaces', 'github_repo', 'TEXT');
   // Sprints that were started before burndown tracking existed get a starting snapshot from their current issues.
   db.exec(`
