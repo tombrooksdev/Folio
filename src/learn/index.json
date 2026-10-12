@@ -36,7 +36,7 @@
   {
     "id": "docs",
     "title": "Docs and knowledge",
-    "summary": "Write, organise and share pages the way you would in Confluence.",
+    "summary": "Write, organise and share pages in a familiar wiki-style layout.",
     "audience": "Writers",
     "icon": "file",
     "lessons": [
@@ -75,7 +75,7 @@
   {
     "id": "sprints",
     "title": "Plan and run a sprint",
-    "summary": "Backlog, epics, boards and reports, the way you would in Jira.",
+    "summary": "Backlog, epics, boards and reports, in a familiar Scrum layout.",
     "audience": "Teams",
     "icon": "board",
     "lessons": [

@@ -29,7 +29,7 @@ rm -rf "$STAGE" "$DIST"; mkdir -p "$CACHE" "$STAGE" "$DIST"
 say "Staging Folio $VERSION"
 APP=$STAGE/app
 mkdir -p "$APP"
-cp -r src public scripts package.json package-lock.json CHANGELOG.md LICENSE README.md "$APP/"
+cp -r src public scripts package.json package-lock.json CHANGELOG.md LICENSE THIRD-PARTY-NOTICES.md README.md "$APP/"
 (cd "$APP" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund --loglevel=error)
 
 # ---- download and verify a Node.js runtime
@@ -51,6 +51,7 @@ linux_tree() { # $1 = target, $2 = destination directory (becomes the install ro
   fetch_node "$1"
   mkdir -p "$2/runtime/bin" "$2/bin"
   cp "$CACHE/x-$1"/node-v*/bin/node "$2/runtime/bin/node"
+  cp "$CACHE/x-$1"/node-v*/LICENSE "$2/runtime/NODE-LICENSE.txt"
   cp -r "$APP" "$2/app"
   cp packaging/linux/folio "$2/bin/folio"
   chmod 755 "$2/bin/folio" "$2/runtime/bin/node"
@@ -119,6 +120,7 @@ build_windows() {
   local z=$STAGE/Folio
   mkdir -p "$z/runtime"
   cp "$CACHE"/x-win-x64/node-v*/node.exe "$z/runtime/node.exe"
+  cp "$CACHE"/x-win-x64/node-v*/LICENSE "$z/runtime/NODE-LICENSE.txt"
   cp -r "$APP" "$z/app"
   for f in "${files[@]}"; do cp "packaging/windows/$f" "$z/"; done
   cp packaging/windows/README-WINDOWS.txt "$z/"
@@ -134,6 +136,7 @@ build_windows() {
   local w=$STAGE/win-installer
   mkdir -p "$w/runtime" "$w/service"
   cp "$CACHE"/x-win-x64/node-v*/node.exe "$w/runtime/node.exe"
+  cp "$CACHE"/x-win-x64/node-v*/LICENSE "$w/runtime/NODE-LICENSE.txt"
   cp -r "$APP" "$w/app"
   for f in "${files[@]}"; do cp "packaging/windows/$f" "$w/"; done
   cp packaging/windows/config.txt "$w/config.txt"

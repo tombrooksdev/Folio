@@ -19,7 +19,7 @@ Built by [tombrooks.dev](https://tombrooks.dev)
 
 ## Why Folio?
 
-Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both that most small teams use 90% of the time:
+Wikis and issue trackers like Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both that most small teams use 90% of the time:
 
 - **Write things down** in spaces and nested pages, with Markdown, live preview, version history and instant search.
 - **Plan and run sprints** with a backlog, a drag-and-drop board and story points.
@@ -27,7 +27,7 @@ Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both 
 
 ## Design principles
 
-Folio copies what people actually use in Confluence and Jira and leaves out what gets in the way:
+Folio follows the conventions people already know from tools like Confluence and Jira, and leaves out what gets in the way:
 
 - **Familiar first.** Spaces, page trees, templates, panels and version history; backlog, board, sprints, epics, sub-tasks, links and a Create button. The shortcuts match Jira's.
 - **No configuration mazes.** No workflow editor, permission schemes, custom field screens or plugin marketplace. Three statuses, three issue types, three priorities. Everything works out of the box.
@@ -373,6 +373,10 @@ Ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Credits
 
 Designed and built by [Tom Brooks](https://tombrooks.dev). Typography: [DM Serif Display](https://fonts.google.com/specimen/DM+Serif+Display), [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/), all under the SIL Open Font License and bundled with the app.
+
+## Trademarks and third-party notices
+
+Folio is an independent project, not affiliated with or endorsed by Atlassian. Jira and Confluence are trademarks of Atlassian Corporation Plc, named here only to describe what Folio resembles. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for font and dependency licences.
 
 ## License
 

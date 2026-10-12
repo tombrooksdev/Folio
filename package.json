@@ -1,6 +1,6 @@
 {
   "name": "folio",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "Self-hosted wiki: spaces, nested pages, Markdown, search, version history.",
   "type": "module",
   "private": true,
@@ -25,8 +25,8 @@
   "author": "Tom Brooks <https://tombrooks.dev>",
   "keywords": [
     "wiki",
-    "confluence-alternative",
-    "jira-alternative",
+    "wiki-alternative",
+    "issue-tracker",
     "scrum",
     "kanban",
     "self-hosted",

@@ -6,6 +6,18 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.9.4] - 2026-10-12
+
+Licensing and notices.
+
+### Added
+- `THIRD-PARTY-NOTICES.md`: trademark disclaimer, font and dependency licences, and what the installers bundle.
+- `public/fonts/OFL.txt`: the SIL Open Font License text and copyright lines for the bundled fonts, as the licence requires.
+
+### Changed
+- README wording and package keywords no longer lean on the Jira and Confluence names; a non-affiliation note was added.
+- Installers and packages now include the notices file.
+
 ## [0.9.3] - 2026-10-12
 
 Windows fixes.
