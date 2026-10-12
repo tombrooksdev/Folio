@@ -6,3 +6,7 @@ data/*
 dist
 packaging/.cache
 packaging/.stage
+
+# private security reports
+SECURITY-AUDIT.html
+SECURITY-FIXES.md
