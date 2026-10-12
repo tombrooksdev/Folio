@@ -2,23 +2,28 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { createApp } from '../src/app.js';
+import { createGithub } from '../src/github.js';
+import { mkdtempSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-async function boot() {
-  const server = createApp(openDb(':memory:')).listen(0);
+async function boot(opts = {}) {
+  const uploadDir = mkdtempSync(join(tmpdir(), 'folio-test-'));
+  const server = createApp(openDb(':memory:'), { uploadDir, ...opts }).listen(0);
   server.unref();
   const base = `http://localhost:${server.address().port}`;
   let cookie = '';
-  const req = async (path, { method = 'GET', form } = {}) => {
+  const req = async (path, { method = 'GET', form, raw } = {}) => {
     const r = await fetch(base + path, {
       method, redirect: 'manual',
-      headers: { cookie, ...(form && { 'content-type': 'application/x-www-form-urlencoded' }) },
-      body: form && new URLSearchParams(form),
+      headers: { cookie, ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...(raw && { 'content-type': 'application/octet-stream' }) },
+      body: raw ?? (form && new URLSearchParams(form)),
     });
     const sc = r.headers.get('set-cookie');
     if (sc) cookie = sc.split(';')[0];
-    return { status: r.status, loc: r.headers.get('location'), text: await r.text() };
+    return { status: r.status, loc: r.headers.get('location'), text: await r.text(), headers: r.headers };
   };
-  return { req, close: () => server.close() };
+  return { req, uploadDir, close: () => server.close() };
 }
 
 test('setup, spaces, pages, history, search, sanitising', async () => {
@@ -148,5 +153,165 @@ test('changelog page renders from CHANGELOG.md with the package version', async 
   assert.match(page, new RegExp(`Folio v${version.replaceAll('.', '\\.')}`));
   assert.match(page, new RegExp(`\\[?${version.replaceAll('.', '\\.')}\\]?`));
   assert.match(page, /Unreleased/);
+  close();
+});
+
+
+test('epics and labels: create, assign, filter, progress', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  await req('/s/ENG/epics', { method: 'POST', form: { name: 'Onboarding' } });
+  const epicId = (await req('/s/ENG/backlog')).text.match(/data-epic-pick="(\d+)"/)[1];
+  const a = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Signup', points: '5', epic_id: epicId, labels: 'Frontend, urgent frontend' } })).loc.split('/')[2];
+  const b = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Other', points: '3' } })).loc.split('/')[2];
+
+  let issue = (await req(`/i/${a}`)).text;
+  assert.match(issue, /Onboarding/); assert.match(issue, /value="frontend, urgent"/); // de-duplicated, lower-cased
+  await req(`/i/${a}/field`, { method: 'POST', form: { field: 'status', value: 'done' } });
+  const epic = (await req(`/e/${epicId}`)).text;
+  assert.match(epic, /1 of 1 issues done/); assert.match(epic, /5\/5 points/);
+
+  const byEpic = (await req(`/s/ENG/issues?epic=${epicId}`)).text;
+  assert.match(byEpic, /Signup/); assert.doesNotMatch(byEpic, />Other</);
+  assert.match((await req('/s/ENG/issues?label=urgent')).text, /Signup/);
+  assert.doesNotMatch((await req('/s/ENG/issues?label=nope')).text, /Signup/);
+  assert.match((await req('/s/ENG/issues?epic=none')).text, /Other/);
+  assert.match((await req('/s/ENG/issues?q=100%25_')).text, /0 issues found/); // LIKE wildcards are escaped
+
+  await req(`/i/${b}/field`, { method: 'POST', form: { field: 'epic_id', value: '99999' } }); // other-space/unknown epic ignored
+  assert.doesNotMatch((await req(`/i/${b}`)).text, /class="epic-chip/);
+  await req(`/e/${epicId}/delete`, { method: 'POST' });
+  issue = (await req(`/i/${a}`)).text;
+  assert.match(issue, /Signup/); assert.doesNotMatch(issue, /class="epic-chip/); // issue survives, loses the epic
+  close();
+});
+
+test('attachments: upload, serve safely, adopt pasted images, delete', async () => {
+  const { req, uploadDir, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const png = Buffer.from('89504e470d0a1a0a', 'hex');
+  const up = JSON.parse((await req('/attachments?space=ENG&name=shot.png', { method: 'POST', raw: png })).text);
+  assert.match(up.markdown, /^!\[shot\.png\]\(\/files\/\d+\/shot\.png\)$/);
+  const file = await req(up.url);
+  assert.equal(file.headers.get('content-type'), 'image/png');
+  assert.match(file.headers.get('content-disposition'), /^inline/);
+
+  // an HTML upload must download, never render
+  const html = JSON.parse((await req('/attachments?space=ENG&name=evil.html', { method: 'POST', raw: Buffer.from('<script>alert(1)</script>') })).text);
+  const served = await req(html.url);
+  assert.match(served.headers.get('content-disposition'), /^attachment/);
+  assert.equal(served.headers.get('x-content-type-options'), 'nosniff');
+  const svg = JSON.parse((await req('/attachments?space=ENG&name=x.svg', { method: 'POST', raw: Buffer.from('<svg/>') })).text);
+  assert.match((await req(svg.url)).headers.get('content-disposition'), /^attachment/);
+
+  // path tricks in the name are neutralised
+  const sneaky = JSON.parse((await req('/attachments?space=ENG&name=' + encodeURIComponent('../../etc/passwd'), { method: 'POST', raw: png })).text);
+  assert.equal(sneaky.filename, 'passwd');
+
+  // a page created with the pasted image adopts it and lists it
+  const pid = (await req('/s/ENG/pages', { method: 'POST', form: { title: 'Doc', body: `look ${up.markdown}` } })).loc.split('/')[2];
+  const view = (await req(`/p/${pid}`)).text;
+  assert.match(view, /Attachments <span class="count">1<\/span>/);
+  assert.match(view, /<img src="\/files\/\d+\/shot\.png"/);
+
+  assert.equal((await req('/attachments?space=NOPE&name=a.png', { method: 'POST', raw: png })).status, 404);
+  assert.equal((await req('/attachments?space=ENG&name=a.png', { method: 'POST', raw: Buffer.alloc(0) })).status, 400);
+
+  const before = readdirSync(uploadDir).length;
+  await req(`/attachments/${up.id}/delete`, { method: 'POST', form: { back: `/p/${pid}` } });
+  assert.equal(readdirSync(uploadDir).length, before - 1);
+  assert.equal((await req(up.url)).status, 404);
+
+  // deleting a page removes its attachments' files
+  const mine = JSON.parse((await req(`/attachments?space=ENG&page=${pid}&name=doc.pdf`, { method: 'POST', raw: Buffer.from('%PDF') })).text);
+  const n = readdirSync(uploadDir).length;
+  await req(`/p/${pid}/delete`, { method: 'POST' });
+  assert.equal(readdirSync(uploadDir).length, n - 1);
+  assert.equal((await req(mine.url)).status, 404);
+  close();
+});
+
+test('attachments: uploads over the size limit are refused', async () => {
+  const { req, close } = await boot({ maxUploadMb: 1 });
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const res = await req('/attachments?space=ENG&name=big.bin', { method: 'POST', raw: Buffer.alloc(1048576 + 10) });
+  assert.equal(res.status, 413);
+  close();
+});
+
+test('page comments: thread, reply, only authors delete; pages can be moved without cycles', async () => {
+  const { req, close } = await boot();
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const p1 = (await req('/s/ENG/pages', { method: 'POST', form: { title: 'Parent', body: 'x' } })).loc.split('/')[2];
+  const p2 = (await req('/s/ENG/pages', { method: 'POST', form: { title: 'Child', body: 'y', parent_id: p1 } })).loc.split('/')[2];
+
+  const c = await req(`/p/${p1}/comments`, { method: 'POST', form: { body: 'First **comment**' } });
+  const cid = c.loc.match(/#c(\d+)/)[1];
+  await req(`/p/${p1}/comments`, { method: 'POST', form: { body: 'A reply', parent_id: cid } });
+  const view = (await req(`/p/${p1}`)).text;
+  assert.match(view, /Comments <span class="count">2<\/span>/); assert.match(view, /<strong>comment<\/strong>/); assert.match(view, /pc reply/);
+  assert.equal((await req(`/p/${p1}/comments`, { method: 'POST', form: { body: 'x', parent_id: '9999' } })).status, 400);
+  await req(`/comments/${cid}/delete`, { method: 'POST' });
+  assert.match((await req(`/p/${p1}`)).text, /Comments <span class="count">0<\/span>/); // replies cascade
+
+  // move: Parent under Child would be a cycle, so the parent stays unchanged
+  await req(`/p/${p1}`, { method: 'POST', form: { title: 'Parent', body: 'x', parent_id: p2 } });
+  assert.match((await req(`/p/${p1}/edit`)).text, /<option value="" selected>|<option value="">Top level/);
+  assert.doesNotMatch((await req(`/p/${p1}/edit`)).text, new RegExp(`<option value="${p2}"`)); // own descendants are not offered
+  await req(`/p/${p2}`, { method: 'POST', form: { title: 'Child', body: 'y', parent_id: '' } }); // move to top level
+  assert.doesNotMatch((await req(`/p/${p2}`)).text.match(/<nav class="crumbs"[\s\S]*?<\/nav>/)[0], /Parent/); // no longer under Parent
+  close();
+});
+
+test('github: link a repo, browse tabs, key links, development panel, errors', async () => {
+  const calls = [];
+  const fetchFn = async (url) => {
+    calls.push(url);
+    const json = (data, status = 200) => ({ ok: status === 200, status, json: async () => data });
+    if (url.endsWith('/repos/o/r')) return json({ full_name: 'o/r', html_url: 'https://github.com/o/r', description: 'demo', default_branch: 'main', language: 'JS', stargazers_count: 3, forks_count: 1, open_issues_count: 2 });
+    if (url.includes('/commits')) return json([{ sha: 'abcdef1234', html_url: 'https://github.com/o/r/commit/abcdef1', commit: { message: 'Fix login ENG-1 and <b>html</b>\n\nbody', author: { name: 'Tom', date: new Date().toISOString() } } }]);
+    if (url.includes('/pulls')) return json([{ number: 7, title: 'Add signup ENG-1', state: 'open', html_url: 'https://github.com/o/r/pull/7', user: { login: 'tom' }, updated_at: new Date().toISOString(), head: { ref: 'eng-1-signup' }, body: '' }]);
+    if (url.includes('/branches')) return json([{ name: 'main', protected: true, commit: { sha: 'abcdef1' } }]);
+    if (url.includes('/readme')) return json({ content: Buffer.from('# Hello readme').toString('base64') });
+    return json({}, 404);
+  };
+  const { req, close } = await boot({ github: createGithub({ fetchFn }) });
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  const id = (await req('/s/ENG/issues', { method: 'POST', form: { title: 'Signup' } })).loc.split('/')[2];
+
+  assert.match((await req('/s/ENG/code')).text, /Link a GitHub repository/);
+  assert.equal((await req('/s/ENG/code/link', { method: 'POST', form: { repo: 'not a repo!' } })).status, 400);
+  assert.equal((await req('/s/ENG/code/link', { method: 'POST', form: { repo: 'https://github.com/o/r.git' } })).loc, '/s/ENG/code');
+
+  const commits = (await req('/s/ENG/code')).text;
+  assert.match(commits, /o\/r/); assert.match(commits, new RegExp(`<a class="issue-link" href="/i/${id}">ENG-1</a>`));
+  assert.match(commits, /&lt;b&gt;html&lt;\/b&gt;/); // commit text is escaped
+  assert.match((await req('/s/ENG/code?tab=pulls')).text, /Add signup/);
+  assert.match((await req('/s/ENG/code?tab=branches')).text, /protected/);
+  assert.match((await req('/s/ENG/code?tab=readme')).text, /<h1>Hello readme<\/h1>/);
+  assert.match((await req(`/i/${id}`)).text, /data-src="\/i\/\d+\/dev"/);
+  const dev = (await req(`/i/${id}/dev`)).text;
+  assert.match(dev, /#7 Add signup ENG-1/); assert.match(dev, /abcdef1/);
+  assert.ok(calls.every((u) => u.startsWith('https://api.github.com/repos/o/r'))); // only ever talks to the linked repo
+
+  await req('/s/ENG/code/unlink', { method: 'POST' });
+  assert.match((await req('/s/ENG/code')).text, /Link a GitHub repository/);
+  assert.equal((await req(`/i/${id}/dev`)).status, 404);
+  close();
+});
+
+test('github: errors are shown, not thrown', async () => {
+  const { req, close } = await boot({ github: createGithub({ fetchFn: async () => ({ ok: false, status: 403, json: async () => ({}) }) }) });
+  await req('/setup', { method: 'POST', form: { username: 'a', password: 'longenough' } });
+  await req('/spaces', { method: 'POST', form: { name: 'Eng', key: 'ENG' } });
+  await req('/s/ENG/code/link', { method: 'POST', form: { repo: 'o/r' } });
+  const res = await req('/s/ENG/code');
+  assert.equal(res.status, 502);
+  assert.match(res.text, /rate limit/i);
   close();
 });

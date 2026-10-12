@@ -143,3 +143,16 @@ if (wt) {
   paint();
   wt.addEventListener('click', () => { save('folio-readable', document.body.classList.toggle('readable')); paint(); });
 }
+
+// generic behaviours used across pages
+document.querySelectorAll('form[data-confirm]').forEach((f) => f.addEventListener('submit', (e) => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
+document.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', () => {
+  const target = document.getElementById(b.dataset.toggle);
+  target.hidden = !target.hidden;
+  if (!target.hidden) target.querySelector('input:not([type=hidden]),textarea')?.focus();
+}));
+document.querySelectorAll('[data-auto]').forEach((el) => el.addEventListener('change', () => el.form.requestSubmit()));
+// panels whose HTML is fetched after load (e.g. the GitHub "Development" panel on an issue)
+document.querySelectorAll('[data-src]').forEach(async (el) => {
+  try { const r = await fetch(el.dataset.src); el.innerHTML = r.ok ? await r.text() : ''; } catch { el.innerHTML = '<h3>Development</h3><p class="muted pad">Could not load.</p>'; }
+});

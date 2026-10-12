@@ -6,6 +6,9 @@ import {
   loginAllowed, recordFailedLogin,
 } from './auth.js';
 import { mountBoard } from './board.js';
+import { createFiles } from './files.js';
+import { createGithub, mountGithub } from './github.js';
+import { mountComments, commentsPanel, commentCount } from './comments.js';
 import { renderMarkdown, esc, layout, treeHtml, icon, hueClass } from './render.js';
 
 const { version: VERSION } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
@@ -13,7 +16,12 @@ const CHANGELOG = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf
 const parseCookies = (h = '') =>
   Object.fromEntries(h.split(';').map((c) => c.trim().split('=')).filter((p) => p[0]).map(([k, ...v]) => [k, v.join('=')]));
 
-export function createApp(db, { secureCookies = false } = {}) {
+export function createApp(db, {
+  secureCookies = false,
+  uploadDir = new URL('../data/uploads', import.meta.url).pathname,
+  maxUploadMb = 25,
+  github = createGithub(),
+} = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.static(new URL('../public', import.meta.url).pathname, { setHeaders: (res, f) => res.set('Cache-Control', f.endsWith('.woff2') ? 'public, max-age=31536000, immutable' : 'no-cache') }));
@@ -90,7 +98,12 @@ export function createApp(db, { secureCookies = false } = {}) {
     next();
   });
 
-  mountBoard(app, { db, page: (res, o) => page(res, o), getSpace: (k) => getSpace(k) });
+  const files = createFiles({ db, uploadDir, maxBytes: maxUploadMb * 1048576 });
+  const ctx = { db, page: (res, o) => page(res, o), getSpace: (k) => getSpace(k), files, github };
+  files.mount(app, ctx);
+  mountBoard(app, ctx);
+  mountComments(app, ctx);
+  mountGithub(app, ctx);
 
   // ---- spaces ----
   app.get('/', (req, res) => {
@@ -153,6 +166,7 @@ export function createApp(db, { secureCookies = false } = {}) {
     const id = tx(db, () => {
       const r = db.prepare('INSERT INTO pages (space_id, parent_id, title, body, updated_by) VALUES (?, ?, ?, ?, ?)')
         .run(space.id, parentId, title, req.body.body ?? '', req.user.id);
+      files.adopt(space.id, { page_id: Number(r.lastInsertRowid) }, req.body.body);
       return Number(r.lastInsertRowid);
     });
     res.redirect(`/p/${id}`);
@@ -168,7 +182,7 @@ export function createApp(db, { secureCookies = false } = {}) {
       body: `<header class="article-head">
           <nav class="crumbs" aria-label="Breadcrumb"><a href="/s/${esc(space.key)}">${esc(space.name)}</a>${crumbs.map((c) => `${icon('chevron')}<a href="/p/${c.id}">${esc(c.title)}</a>`).join('')}</nav>
           <h1 class="page-title">${esc(p.title)}</h1>
-          <div class="meta"><span class="chip">${icon('clock')}Updated ${esc(p.updated_at.slice(0, 16))} UTC</span>${author ? `<span class="chip">by ${esc(author)}</span>` : ''}</div>
+          <div class="meta"><span class="chip">${icon('clock')}Updated ${esc(p.updated_at.slice(0, 16))} UTC</span>${author ? `<span class="chip">by ${esc(author)}</span>` : ''}<a class="chip" href="#comments">${commentCount(db, p.id)} comment${commentCount(db, p.id) === 1 ? '' : 's'}</a></div>
           <div class="actions">
             <a class="btn" href="/p/${p.id}/edit">${icon('edit')}Edit</a>
             <a class="btn ghost" href="/s/${esc(space.key)}/new?parent=${p.id}">${icon('plus')}Child page</a>
@@ -177,7 +191,9 @@ export function createApp(db, { secureCookies = false } = {}) {
             <button type="button" class="ghost width-toggle" id="width-toggle" aria-pressed="false">${icon('sidebar')}Readable width</button>
           </div>
         </header>
-        <article class="doc" id="doc">${renderMarkdown(p.body)}</article>`,
+        <article class="doc" id="doc">${renderMarkdown(p.body)}</article>
+        ${files.panel({ page_id: p.id }, space)}
+        ${commentsPanel(db, p, req.user)}`,
     });
   });
   app.get('/p/:id.md', (req, res) => {
@@ -196,10 +212,18 @@ export function createApp(db, { secureCookies = false } = {}) {
     if (!p) return res.status(404).send('No such page');
     const title = (req.body.title ?? '').trim();
     if (!title) return res.status(400).send('Title required');
+    // moving: the new parent must be in the same space and not the page itself or one of its descendants
+    let parentId = p.parent_id;
+    if ('parent_id' in req.body) {
+      const want = req.body.parent_id ? Number(req.body.parent_id) : null;
+      const below = new Set(descendantIds(p.id));
+      if (want === null || (getPage(want)?.space_id === p.space_id && !below.has(want))) parentId = want;
+    }
     tx(db, () => {
       db.prepare('INSERT INTO versions (page_id, title, body, edited_by) VALUES (?, ?, ?, ?)').run(p.id, p.title, p.body, p.updated_by);
-      db.prepare("UPDATE pages SET title = ?, body = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?")
-        .run(title, req.body.body ?? '', req.user.id, p.id);
+      db.prepare("UPDATE pages SET title = ?, body = ?, parent_id = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?")
+        .run(title, req.body.body ?? '', parentId, req.user.id, p.id);
+      files.adopt(p.space_id, { page_id: p.id }, req.body.body);
     });
     res.redirect(`/p/${p.id}`);
   });
@@ -207,6 +231,7 @@ export function createApp(db, { secureCookies = false } = {}) {
     const p = getPage(Number(req.params.id));
     if (!p) return res.status(404).send('No such page');
     const space = db.prepare('SELECT key FROM spaces WHERE id = ?').get(p.space_id);
+    files.purge({ page_id: p.id });
     db.prepare('DELETE FROM pages WHERE id = ?').run(p.id); // children cascade
     res.redirect(`/s/${space.key}`);
   });
@@ -291,10 +316,20 @@ export function createApp(db, { secureCookies = false } = {}) {
       <ul class="spaces">${spaces.map((s) => {
         const here = space && s.id === space.id;
         return `<li class="space${here ? ' here' : ''}"><a class="space-link" href="/s/${esc(s.key)}"><span class="mono-tile ${hueClass(s.key)}">${esc(s.key.slice(0, 1))}</span>${esc(s.name)}</a>${here
-          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><a class="nav-link sm-nav${section === 'reports' ? ' cur' : ''}" href="/s/${esc(s.key)}/reports">${icon('chart')}Reports</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/new${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
+          ? `<div class="space-body"><a class="nav-link sm-nav${section === 'board' ? ' cur' : ''}" href="/s/${esc(s.key)}/board">${icon('board')}Board</a><a class="nav-link sm-nav${section === 'backlog' ? ' cur' : ''}" href="/s/${esc(s.key)}/backlog">${icon('backlog')}Backlog</a><a class="nav-link sm-nav${section === 'issues' ? ' cur' : ''}" href="/s/${esc(s.key)}/issues">${icon('search')}Issues</a><a class="nav-link sm-nav${section === 'reports' ? ' cur' : ''}" href="/s/${esc(s.key)}/reports">${icon('chart')}Reports</a><a class="nav-link sm-nav${section === 'code' ? ' cur' : ''}" href="/s/${esc(s.key)}/code">${icon('branch')}Code</a><div class="nav-label sub">Pages</div><a class="create" href="/s/${esc(s.key)}/new${cur ? `?parent=${cur.id}` : ''}">${icon('plus')}Create page</a>${treeHtml(spaceTree(s.id), currentId, open) || '<p class="muted pad">No pages yet</p>'}</div>`
           : ''}</li>`;
       }).join('')}</ul>
       <p class="credit"><a href="/changelog" title="What's new">folio v${VERSION}</a> · by <a href="https://tombrooks.dev" target="_blank" rel="noopener">tombrooks.dev</a></p>`;
+  }
+  function descendantIds(id) {
+    return db.prepare('WITH RECURSIVE t(id) AS (SELECT ? UNION ALL SELECT p.id FROM pages p JOIN t ON p.parent_id = t.id) SELECT id FROM t').all(id).map((r) => r.id);
+  }
+  // <option>s for the "Parent page" picker: the space's tree, minus the page being edited and everything under it
+  function parentOptions(space, selfId, selected) {
+    const skip = new Set(selfId ? descendantIds(selfId) : []);
+    const walk = (nodes, depth) => nodes.filter((n) => !skip.has(n.id)).map((n) =>
+      `<option value="${n.id}"${n.id === Number(selected) ? ' selected' : ''}>${'&nbsp;&nbsp;'.repeat(depth)}${esc(n.title)}</option>${walk(n.children, depth + 1)}`).join('');
+    return `<option value="">Top level of ${esc(space.name)}</option>${walk(spaceTree(space.id), 0)}`;
   }
   function breadcrumbs(p) {
     const out = [];
@@ -307,11 +342,11 @@ export function createApp(db, { secureCookies = false } = {}) {
     page(res, {
       title: heading, user: req.user, space, current: existingId, toc: false,
       body: `<span class="eyebrow">${esc(heading)}</span>
-        <form method="post" action="${action}" id="edit-form">
-          <input type="hidden" name="parent_id" value="${esc(p.parent_id ?? '')}">
+        <form method="post" action="${action}" id="edit-form" data-upload-space="${esc(space.key)}"${existingId ? ` data-upload-page="${existingId}"` : ''}>
           <input class="title-input" name="title" value="${esc(p.title)}" placeholder="Page title" aria-label="Page title" required autofocus>
           <div class="toolbar" role="toolbar" aria-label="Formatting">
-            ${tb('bold', 'Bold (Ctrl+B)')}${tb('italic', 'Italic (Ctrl+I)')}${tb('heading', 'Heading', true)}${tb('list', 'List')}${tb('quote', 'Quote')}${tb('code', 'Code')}${tb('link', 'Link', true)}
+            <label class="parent-pick">Parent <select name="parent_id" aria-label="Parent page">${parentOptions(space, existingId, p.parent_id)}</select></label><span class="sep"></span>
+            ${tb('bold', 'Bold (Ctrl+B)')}${tb('italic', 'Italic (Ctrl+I)')}${tb('heading', 'Heading', true)}${tb('list', 'List')}${tb('quote', 'Quote')}${tb('code', 'Code')}${tb('link', 'Link', true)}<button type="button" class="ghost" id="attach-btn" title="Attach a file or image" aria-label="Attach a file or image">${icon('paperclip')}</button><input type="file" id="attach-input" multiple hidden>
             <span class="status"><span class="dot" id="dot"></span><span id="words">0 words</span></span>
           </div>
           <div class="editor">
@@ -321,7 +356,7 @@ export function createApp(db, { secureCookies = false } = {}) {
           <div class="actions"><button>${icon('save')}Save page</button><a class="btn ghost" href="${existingId ? `/p/${existingId}` : `/s/${esc(space.key)}`}">Cancel</a></div>
         </form>
         ${existingId ? `<form method="post" action="/p/${existingId}/delete" data-confirm="Delete this page and all its child pages?"><button class="danger">${icon('trash')}Delete page</button></form>` : ''}
-        <script src="/editor.js"></script>`,
+        <script src="/files.js"></script><script src="/editor.js"></script>`,
     });
   }
 

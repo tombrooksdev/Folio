@@ -62,6 +62,8 @@ const PATHS = {
   palette: 'M12 3a9 9 0 100 18c1.1 0 1.8-.9 1.5-2-.3-1 .3-2 1.4-2H17a4 4 0 004-4c0-5-4-10-9-10zM7.5 12h.01M10 7.5h.01M15 7.5h.01',
   chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   equals: 'M5 9h14M5 15h14',
+  branch: 'M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9',
+  paperclip: 'M21 12.5l-8.5 8.5a5 5 0 01-7-7l9-9a3.3 3.3 0 014.7 4.7l-9 9a1.7 1.7 0 01-2.4-2.4l8.3-8.3',
   logo: 'M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2zM14 3v6h6M8 13h8M8 17h5',
 };
 export const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${PATHS[name]}"/></svg>`;

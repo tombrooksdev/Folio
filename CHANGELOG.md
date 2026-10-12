@@ -4,8 +4,32 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.5.0] - 2026-10-12
+
+Epics and labels, attachments and page comments, and a read-only GitHub integration.
+
+### Added
+- **Epics**: group issues under a larger goal. An epics panel on the backlog shows progress per epic and filters the backlog when clicked; each epic has its own page with progress, description and issues, and can be marked done or deleted.
+- **Labels** on issues (comma separated, lower-cased, de-duplicated), shown on cards and rows and editable inline.
+- **Issue search** per space: filter by text or key, status, type, priority, assignee, epic, label and sprint.
+- Board filters for epic and label alongside search and assignee.
+- **Attachments** on pages and issues: drop zones, upload from the editor toolbar, and paste or drop images straight into Markdown. Images embed inline; other files list with size, uploader and date. Files are stored in `data/uploads` and are served safely (only images and PDFs display inline; everything else, including HTML and SVG, downloads).
+- **Page comments** with one level of replies, Markdown support, and delete for your own comments.
+- **Move pages**: choose a parent page when editing; moving a page under its own descendants is prevented.
+- **GitHub integration** (read-only): link a repository to a space and browse its commits, pull requests, branches and README. Issue keys in commit messages and PR titles link back to the issue, and each issue gets a **Development** panel listing pull requests and commits that mention its key.
+- Sidebar links for **Issues** and **Code**.
+- Configuration: `FOLIO_UPLOAD_DIR`, `FOLIO_MAX_UPLOAD_MB` and `FOLIO_GITHUB_TOKEN`.
+- Regression tests for epics, labels, attachments, comments, page moves and GitHub (with the GitHub API stubbed).
+
 ### Changed
-- Refreshed README screenshots, including the issue view, reports and burndown.
+- `npm run backup` also copies the attachments folder.
+- Databases from earlier versions are upgraded in place on start-up; no manual migration is needed.
+
+### Security
+- Uploaded filenames are stripped of path components, uploads are size-limited, and file responses carry `nosniff` and a locked-down Content Security Policy.
+- The GitHub integration only ever contacts `api.github.com` for the linked repository, and everything it returns is escaped before display.
 
 ## [0.4.0] - 2026-10-12
 
@@ -81,7 +105,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/tombrooksdev/Folio/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tombrooksdev/Folio/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tombrooksdev/Folio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/tombrooksdev/Folio/compare/v0.1.0...v0.2.0

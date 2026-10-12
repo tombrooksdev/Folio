@@ -6,7 +6,7 @@ COPY CHANGELOG.md ./
 COPY src ./src
 COPY public ./public
 COPY scripts ./scripts
-ENV FOLIO_DB=/data/folio.db PORT=3000
+ENV FOLIO_DB=/data/folio.db FOLIO_UPLOAD_DIR=/data/uploads PORT=3000
 VOLUME /data
 EXPOSE 3000
 USER node

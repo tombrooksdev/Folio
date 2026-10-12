@@ -63,15 +63,19 @@ const search = document.getElementById('board-search');
 if (search) {
   const users = new Set();
   const mine = document.getElementById('only-mine'), clear = document.getElementById('clear-filters');
+  const epic = document.getElementById('epic-filter'), lab = document.getElementById('label-filter');
   const apply = () => {
     const q = search.value.trim().toLowerCase();
     $$('.board [data-drag]').forEach((el) => {
-      el.hidden = !((!q || el.dataset.text.includes(q)) && (!users.size || users.has(el.dataset.assignee)));
+      el.hidden = !((!q || el.dataset.text.includes(q)) && (!users.size || users.has(el.dataset.assignee))
+        && (!epic?.value || el.dataset.epic === epic.value) && (!lab?.value || el.dataset.labels.includes(`,${lab.value},`)));
     });
-    clear.hidden = !(q || users.size);
+    clear.hidden = !(q || users.size || epic?.value || lab?.value);
     recount();
   };
   search.addEventListener('input', apply);
+  epic?.addEventListener('change', apply);
+  lab?.addEventListener('change', apply);
   $$('.av-filter').forEach((b) => b.addEventListener('click', () => {
     const u = b.dataset.user;
     users.has(u) ? users.delete(u) : users.add(u);
@@ -85,6 +89,7 @@ if (search) {
   });
   clear.addEventListener('click', () => {
     users.clear(); search.value = '';
+    if (epic) epic.value = ''; if (lab) lab.value = '';
     $$('.av-filter').forEach((b) => b.setAttribute('aria-pressed', false));
     apply();
   });
@@ -95,14 +100,13 @@ $$('.collapse').forEach((b) => b.addEventListener('click', () => {
   const block = b.closest('.sprint-block');
   b.setAttribute('aria-expanded', block.classList.toggle('collapsed') ? 'false' : 'true');
 }));
-$$('[data-toggle]').forEach((b) => b.addEventListener('click', () => {
-  const target = document.getElementById(b.dataset.toggle);
-  target.hidden = !target.hidden;
-  if (!target.hidden) target.querySelector('input:not([type=hidden])')?.focus();
+
+// ---- backlog: click an epic to filter every list by it ----
+$$('[data-epic-pick]').forEach((b) => b.addEventListener('click', () => {
+  const on = b.getAttribute('aria-pressed') !== 'true';
+  $$('[data-epic-pick]').forEach((o) => o.setAttribute('aria-pressed', 'false'));
+  b.setAttribute('aria-pressed', on);
+  $$('.sprint-block [data-drag]').forEach((el) => { el.hidden = on && el.dataset.epic !== b.dataset.epicPick; });
+  recount();
 }));
-
-// ---- issue page: selects and inputs save when changed ----
-$$('[data-auto]').forEach((el) => el.addEventListener('change', () => el.form.requestSubmit()));
-
-$$('form[data-confirm]').forEach((f) => f.addEventListener('submit', (e) => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
 })();

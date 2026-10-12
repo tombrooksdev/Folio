@@ -33,16 +33,26 @@ Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both 
 - Version history with one-click restore
 - Full-text search (SQLite FTS5, word-stem matching, highlighted snippets) and a <kbd>Ctrl</kbd>+<kbd>K</kbd> command palette
 - Per-page "On this page" outline with scroll-spy, heading anchors, copy buttons on code blocks
+- **Attachments**: drop files on a page, or paste and drop images straight into the editor; images embed inline
+- **Page comments** with replies, and **move pages** between parents from the editor
 - Export any page as `.md`
 
 **Scrum**
 - A board and a backlog in every space
 - Sprints: create, plan, start (1-4 weeks), complete (unfinished work returns to the backlog)
-- Issues: story / bug / task, priority, story points, assignee, Markdown description, comments
+- Issues: story / bug / task, priority, story points, assignee, Markdown description, attachments, comments
+- **Epics** with progress roll-up, and **labels**, filterable on the board, backlog and issue search
+- **Issue search** by text, status, type, priority, assignee, epic, label and sprint
 - Drag and drop to reorder, move between sprints, and change status
 - Sprint progress with points done and days left, plus burndown, velocity and sprint history reports
 - Jira-style layout: filters, status lozenges, issue-type icons, a two-column issue view with inline editing
 - Issue keys like `ENG-12`
+
+**GitHub (read-only)**
+- Link a repository to a space and browse its commits, pull requests, branches and README
+- Issue keys in commit messages and PR titles (`ENG-12`) link back to the issue
+- A **Development** panel on each issue lists the pull requests and commits that mention it
+- Folio never writes to GitHub, and never talks to anything but `api.github.com`
 
 **Make it yours**
 - **11 built-in themes** (5 light, 6 dark), defaulting to the tombrooks.dev palette
@@ -67,6 +77,10 @@ Confluence and Jira are brilliant, and priced like it. Folio is the 20% of both 
 | Velocity and sprint history | Sprint burndown |
 |---|---|
 | ![Reports](docs/screenshots/reports.png) | ![Sprint report](docs/screenshots/sprint-report.png) |
+
+| Epic | Code (GitHub) |
+|---|---|
+| ![Epic](docs/screenshots/epic.png) | ![Code](docs/screenshots/code.png) |
 
 | Home |
 |---|
@@ -121,6 +135,9 @@ Folio is configured with environment variables.
 | `FOLIO_DB` | `./data/folio.db` (`/data/folio.db` in Docker) | Path to the SQLite database. |
 | `FOLIO_SECURE_COOKIES` | `0` | Set to `1` when served over HTTPS so cookies are marked `Secure`. |
 | `FOLIO_TRUST_PROXY` | `0` | Set to `1` when behind a reverse proxy so the real client IP is used for login throttling. |
+| `FOLIO_UPLOAD_DIR` | `./data/uploads` (`/data/uploads` in Docker) | Where attachments are stored. |
+| `FOLIO_MAX_UPLOAD_MB` | `25` | Largest attachment, in megabytes. |
+| `FOLIO_GITHUB_TOKEN` | *(none)* | Optional GitHub token. Public repos work without one; add it for private repos or to lift the 60 requests/hour limit. A fine-grained, read-only token is enough. |
 
 ## Deploying
 
@@ -166,7 +183,7 @@ You will be prompted for a password (or set `FOLIO_PASSWORD`). All users current
 
 ## Backup and restore
 
-Everything, including pages, history, sprints, issues and users, is in one SQLite file.
+Pages, history, sprints, issues and users are in one SQLite file (`data/folio.db`). Attachments are files in `data/uploads/`. The `data/` folder is the only thing you need to keep.
 
 ```bash
 # Consistent backup, safe while Folio is running
@@ -175,7 +192,9 @@ npm run backup -- my-backup.db
 docker compose exec folio node scripts/backup.js /data/backup-$(date +%F).db
 ```
 
-**Restore:** stop Folio, replace `data/folio.db` with your backup (and delete any `folio.db-wal` / `folio.db-shm` files next to it), then start it again.
+`npm run backup` writes the database copy and an `.uploads` folder next to it.
+
+**Restore:** stop Folio, replace `data/folio.db` with your backup (and delete any `folio.db-wal` / `folio.db-shm` files next to it), put the attachments back in `data/uploads/`, then start it again.
 
 ## Using the Scrum board
 
@@ -186,6 +205,14 @@ docker compose exec folio node scripts/backup.js /data/backup-$(date +%F).db
 5. When you are finished, **Complete sprint**. Done work stays with the sprint; everything else goes back to the backlog.
 
 A space can have one active sprint at a time.
+
+## Linking GitHub
+
+1. Open a space and choose **Code** in the sidebar.
+2. Enter `owner/repository` (a full `https://github.com/...` URL also works) and press **Link repository**.
+3. Browse **Commits**, **Pull requests**, **Branches** and the **README**.
+
+Use your space key in commit messages, branch names or PR titles, for example `ENG-12 Add email verification`. Folio links those keys back to the issue and lists the activity in the issue's **Development** panel. Responses are cached for five minutes. Set `FOLIO_GITHUB_TOKEN` for private repositories.
 
 ## Keyboard shortcuts
 
@@ -202,7 +229,13 @@ A space can have one active sprint at a time.
 src/
   server.js    entry point and env config
   app.js       auth, spaces, pages, history, search routes
-  board.js     sprints, issues, backlog and board routes
+  board.js     sprints, issues, backlog, board and issue search routes
+  epics.js     epics and their progress
+  issues.js    shared issue queries and HTML fragments
+  reports.js   burndown, velocity and sprint history
+  files.js     attachments (upload, safe serving, cleanup)
+  comments.js  page comments
+  github.js    read-only GitHub client and routes
   db.js        schema, FTS5 triggers, helpers
   auth.js      scrypt passwords, sessions, login throttle
   render.js    Markdown -> sanitised HTML, layout, icons
@@ -227,6 +260,8 @@ Themes are sets of CSS variables.
 - State-changing requests from a different origin are rejected.
 - A strict Content Security Policy blocks inline scripts and styles.
 - Markdown is sanitised, so pasted HTML cannot run scripts.
+- Attachments are size-limited and renamed on disk. Only images and PDFs display inline; everything else (including HTML and SVG) downloads, with `nosniff` and a locked-down CSP.
+- The GitHub integration is read-only and only contacts `api.github.com`.
 - Login attempts are throttled per IP.
 
 Not included yet: two-factor auth, per-space permissions and audit logs. Please report vulnerabilities privately rather than in a public issue.
@@ -237,11 +272,11 @@ See [CHANGELOG.md](CHANGELOG.md), also shown in the app at `/changelog` (click t
 
 ## Roadmap
 
-- [ ] File and image attachments
 - [ ] Roles and per-space permissions
-- [ ] Issue search and filters
-- [ ] Move and reorder pages in the tree
-- [ ] Page templates
+- [ ] Reorder pages within the tree
+- [ ] Page labels and templates
+- [ ] Issue links (blocks / relates to) and sub-tasks
+- [ ] Notifications and @mentions
 - [ ] REST API and webhooks
 
 Ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).

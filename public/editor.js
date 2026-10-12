@@ -53,7 +53,5 @@ body.addEventListener('keydown', (e) => {
   if (mod && e.key === 'i') { e.preventDefault(); actions.italic(); }
   if (e.key === 'Tab') { e.preventDefault(); body.setRangeText('  ', body.selectionStart, body.selectionEnd, 'end'); }
 });
-document.querySelectorAll('form[data-confirm]').forEach((f) =>
-  f.addEventListener('submit', (e) => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
 count(); refresh();
 })();

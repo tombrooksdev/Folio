@@ -100,6 +100,42 @@ export function openDb(file) {
       points INTEGER,
       PRIMARY KEY (sprint_id, issue_id)
     );
+    CREATE TABLE IF NOT EXISTS epics (
+      id INTEGER PRIMARY KEY,
+      space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      done INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS issue_labels (
+      issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+      label TEXT NOT NULL,
+      PRIMARY KEY (issue_id, label)
+    );
+    CREATE INDEX IF NOT EXISTS issue_labels_label ON issue_labels(label);
+    CREATE TABLE IF NOT EXISTS attachments (
+      id INTEGER PRIMARY KEY,
+      space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
+      issue_id INTEGER REFERENCES issues(id) ON DELETE SET NULL,
+      filename TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      stored TEXT NOT NULL,
+      uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS attachments_owner ON attachments(page_id, issue_id);
+    CREATE TABLE IF NOT EXISTS page_comments (
+      id INTEGER PRIMARY KEY,
+      page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      parent_id INTEGER REFERENCES page_comments(id) ON DELETE CASCADE,
+      author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS page_comments_page ON page_comments(page_id, id);
     CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
       title, body, content='pages', content_rowid='id', tokenize='porter unicode61'
     );
@@ -114,6 +150,9 @@ export function openDb(file) {
       INSERT INTO pages_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
     END;
   `);
+  // Columns added after v0.4: older databases are upgraded in place.
+  addColumn(db, 'issues', 'epic_id', 'INTEGER REFERENCES epics(id) ON DELETE SET NULL');
+  addColumn(db, 'spaces', 'github_repo', 'TEXT');
   // Sprints that were started before burndown tracking existed get a starting snapshot from their current issues.
   db.exec(`
     INSERT INTO sprint_log (sprint_id, issue_id, scope_delta, done_delta, initial, at)
@@ -121,6 +160,10 @@ export function openDb(file) {
     FROM sprints s JOIN issues i ON i.sprint_id = s.id
     WHERE s.state = 'active' AND NOT EXISTS (SELECT 1 FROM sprint_log l WHERE l.sprint_id = s.id)`);
   return db;
+}
+
+function addColumn(db, table, column, definition) {
+  if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 // Run fn inside a transaction; roll back on throw.
