@@ -44,7 +44,7 @@ export function checklistCard(db, user) {
   const steps = checklist(db, user);
   const done = steps.filter((s) => s.done).length;
   if (done === steps.length) return '';
-  return `<section class="checklist" id="checklist"><header><div><h2>Get started with Folio</h2><p class="muted">${done} of ${steps.length} done. Each step ticks itself off as you go.</p></div>
+  return `<section class="checklist" id="checklist"><header><div><h2>Get started with Folio</h2><p class="muted">${done} of ${steps.length} done</p></div>
     <button type="button" class="link-btn" data-flag="checklist-dismissed" data-remove="#checklist">Dismiss</button></header>
     <div class="bar"><span class="fill w${Math.round((done / steps.length) * 20) * 5}"></span></div>
     <ul>${steps.map((s) => `<li class="${s.done ? 'done' : ''}"><span class="tick">${s.done ? icon('check') : ''}</span>${s.done ? `<span>${esc(s.title)}</span>` : `<a href="${s.href}">${esc(s.title)}</a>`}</li>`).join('')}</ul></section>`;
@@ -111,12 +111,12 @@ export function mountLearn(app, { db, page }) {
     render(res, req, {
       title: 'Learn',
       body: `<div class="page-head"><div><span class="eyebrow">Training</span><h1 class="page-title">Learn Folio</h1>
-          <p class="muted">Short lessons, practice space included. ${lessonDone} of ${lessonTotal} lessons complete.</p></div>
+          <p class="muted">${lessonDone} of ${lessonTotal} lessons complete</p></div>
           <div class="actions"><button type="button" class="ghost" data-tour-start>${icon('play')}Replay the tour</button><a class="btn ghost" href="/changelog">What's new</a></div></div>
         ${nextLesson ? `<a class="continue-card" href="/learn/${next.c.id}/${nextLesson.id}"><span class="eyebrow">${lessonDone ? 'Continue where you left off' : 'Start here'}</span><b>${esc(nextLesson.title)}</b><span class="muted">${esc(next.c.title)} · ${nextLesson.minutes} min</span>${icon('arrow')}</a>` : '<div class="continue-card done"><b>You have finished every lesson.</b><span class="muted">Nicely done. Come back whenever you need a refresher.</span></div>'}
-        <div class="course-grid">${all.map(({ c, p }) => `<a class="course-card" href="/learn/${c.id}">${icon(c.icon)}<b>${esc(c.title)}</b><span class="muted">${esc(c.summary)}</span>
-          <div class="bar"><span class="fill w${Math.round((p.done / p.total) * 20) * 5}"></span></div><span class="muted small">${p.done} of ${p.total} · ${esc(c.audience)}</span></a>`).join('')}</div>
-        <section class="practice"><div><h2>Practice space</h2><p class="muted">A safe space with sample pages, an epic and a running sprint. Click, drag and break things. It never touches your real work, and you can remove it any time.</p></div>
+        <div class="course-list">${all.map(({ c, p }) => `<a class="course-row" href="/learn/${c.id}"><b>${esc(c.title)}</b><span class="muted">${esc(c.summary)}</span>
+          <span class="prog-text${p.done === p.total ? ' done' : ''}">${p.done} / ${p.total}</span></a>`).join('')}</div>
+        <section class="practice"><div><h2>Practice space</h2><p class="muted">A separate space with sample pages, epics and a running sprint to try things in. It never touches your real work, and you can remove it any time.</p></div>
           <div class="actions">${sandbox
             ? `<a class="btn" href="/s/PRACTICE/board">Open the practice space</a><form method="post" action="/learn/sandbox/delete" data-confirm="Delete the practice space and everything in it?"><button class="danger">Remove it</button></form>`
             : `<form method="post" action="/learn/sandbox"><button>${icon('plus')}Create practice space</button></form>`}</div></section>`,
@@ -148,7 +148,7 @@ export function mountLearn(app, { db, page }) {
     render(res, req, {
       title: l.title, course: c.id, lesson: l.id,
       body: `<nav class="crumbs"><a href="/learn">Learn</a>${icon('chevron')}<a href="/learn/${c.id}">${esc(c.title)}</a>${icon('chevron')}<span>${esc(l.title)}</span></nav>
-        <span class="eyebrow">Lesson ${idx + 1} of ${c.lessons.length} · ${l.minutes} min</span><h1 class="page-title">${esc(l.title)}</h1>
+        <h1 class="page-title">${esc(l.title)}</h1><p class="meta-line">Lesson ${idx + 1} of ${c.lessons.length} · ${l.minutes} min</p>
         <article class="doc lesson">${renderMarkdown(lessonBody(c.id, l.id))}</article>
         <div class="lesson-foot">
           ${prev ? `<a class="btn ghost" href="/learn/${c.id}/${prev.id}">Back</a>` : '<span></span>'}

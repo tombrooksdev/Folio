@@ -6,6 +6,20 @@ All notable changes to Folio are recorded here. The format follows [Keep a Chang
 
 Nothing yet.
 
+## [0.9.2] - 2026-10-12
+
+A quieter, more ordinary-looking interface.
+
+### Changed
+- **Headings in the app are plain sans-serif.** The serif face stays for the wordmark and for the pages you write, so documents still read like documents while screens like Spaces, Learn and Settings look like a tool.
+- **Squarer corners and flatter surfaces**: smaller radii on buttons, inputs, menus, cards and callouts; tags are rectangular instead of pills; no lifting cards or sliding rows; rows only change colour on hover.
+- **Plain lists instead of tiles**: the Spaces list, the Learn courses and the space keys are simple rows, and the page-level "eyebrow" captions above titles are gone.
+- **Denser type**: a 14 px base and smaller page titles.
+- **Calmer onboarding**: the getting-started checklist is a plain box, the "continue learning" block is a quiet row with an accent edge, tips are neutral grey, and the empty-state illustrations are removed.
+- **No entrance animations** on pages and articles; only menus and dialogs animate.
+- Page metadata on documents (updated, author, comments) is ordinary small text instead of capitalised labels.
+- Shorter, plainer wording on the Learn and onboarding screens.
+
 ## [0.9.1] - 2026-10-12
 
 A tidier, calmer interface.
@@ -235,7 +249,8 @@ First release: a self-hosted wiki.
 - Single-admin setup, scrypt password hashing, hashed session tokens, login throttling, CSRF origin checks and a strict Content Security Policy.
 - Docker image and Compose file; data stored in one SQLite file.
 
-[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/tombrooksdev/Folio/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/tombrooksdev/Folio/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/tombrooksdev/Folio/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/tombrooksdev/Folio/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/tombrooksdev/Folio/compare/v0.8.0...v0.8.1
