@@ -19,7 +19,7 @@
   "dependencies": {
     "express": "^4.21.0",
     "marked": "^14.1.0",
-    "sanitize-html": "^2.13.0"
+    "sanitize-html": "^2.18.1"
   },
   "license": "MIT",
   "author": "Tom Brooks <https://tombrooks.dev>",
